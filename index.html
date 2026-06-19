@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hamnet-SA-V1 · Master Controller</title>
+  <title>hamnet-SA-V1 · Ham Snuffer Core</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -157,6 +157,8 @@
     .btn-primary:hover:not(:disabled) { background: #d95a7a; }
     .btn-green { background: #2a7a4a; border-color: #4aaa6a; }
     .btn-green:hover:not(:disabled) { background: #3a9a5a; }
+    .btn-snuffer { background: #8a4a2a; border-color: #ca7a4a; }
+    .btn-snuffer:hover:not(:disabled) { background: #aa5a3a; }
     .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .slider { width: 160px; accent-color: #fc5c7d; }
     .status {
@@ -225,6 +227,19 @@
     .legend-5g { color: #aa4afc; }
     .legend-9g { color: #fc2a5a; }
     .gen-desc { font-size:0.8rem; margin-top:6px; color:#d4b483; }
+    .snuffer-output {
+      background: #0a0f15;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #4a607a;
+      max-height: 150px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.8rem;
+      color: #d4b483;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
     @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .power-card { flex-direction: column; gap: 15px; } }
   </style>
 </head>
@@ -232,7 +247,7 @@
 <div class="container">
   <header>
     <h1>📡 hamnet‑SA‑V1</h1>
-    <div class="sub">Master Node · U‑groove Ternary · 9G Backbone</div>
+    <div class="sub">Ham Snuffer Core · U‑groove Ternary · 4G / 9G Ready</div>
     <div style="font-size:0.75rem; color:#6a7f8f; margin-top:6px;">© 2026 Seliim Ahmed – All rights reserved.</div>
   </header>
 
@@ -252,8 +267,8 @@
   <div class="radio-selector" id="radioSelector">
     <div style="font-weight:bold; color:#8899aa;">📻 TRANSCEIVER MODE</div>
     <div class="mode-group">
-      <button id="modeWifiBtn" class="mode-btn active-wifi" onclick="setRadioMode('wifi')">✈️ Wi-Fi Mesh (Airplane Mode)</button>
-      <button id="modeSdrBtn" class="mode-btn" onclick="setRadioMode('sdr')">📡 External Ham SDR</button>
+      <button id="modeWifiBtn" class="mode-btn active-wifi" onclick="setRadioMode('wifi')">✈️ Wi-Fi Mesh (4G)</button>
+      <button id="modeSdrBtn" class="mode-btn" onclick="setRadioMode('sdr')">📡 External Ham SDR (9G)</button>
     </div>
     <div>
       <button id="sdrConnectBtn" class="sdr-connect-btn" disabled onclick="toggleSdrConnection()">🔌 Connect SDR</button>
@@ -279,6 +294,7 @@
 
     <!-- LEFT COLUMN -->
     <div>
+      <!-- MORSE TRANSLATOR -->
       <div class="card disabled" id="cardMorse">
         <h2>📡 Morse ↔ Binary ↔ ASCII</h2>
         <label>Input text:</label>
@@ -299,6 +315,7 @@
         </div>
       </div>
 
+      <!-- SPEED & TRANSFER -->
       <div class="card disabled" id="cardSpeed">
         <h2>⚙️ Speed & Internet‑Ready</h2>
         <div class="flex">
@@ -316,6 +333,7 @@
         </div>
       </div>
 
+      <!-- VOICE TEST -->
       <div class="card disabled" id="cardVoice">
         <h2>🎤 Voice Transmission Test</h2>
         <div class="flex">
@@ -326,6 +344,7 @@
         <audio id="voicePlayback" controls style="width:100%; margin-top:6px; display:none;"></audio>
       </div>
 
+      <!-- OFFLINE MEDIA -->
       <div class="card disabled" id="cardMedia">
         <h2>📁 Offline Media Player</h2>
         <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">Load local audio/video files.</p>
@@ -346,6 +365,7 @@
 
     <!-- RIGHT COLUMN -->
     <div>
+      <!-- VIDEO P2P -->
       <div class="card disabled" id="cardVideo">
         <h2>📹 Video (P2P, no internet)</h2>
         <div class="video-container">
@@ -365,9 +385,34 @@
         </div>
       </div>
 
+      <!-- SYSTEM LOG -->
       <div class="card disabled" id="cardLog">
         <h2>📋 Event Log</h2>
         <div class="log" id="eventLog">System offline. Press START.</div>
+      </div>
+
+      <!-- ============================================= -->
+      <!-- 🔍 HAM SNUFFER CORE (NEW)                     -->
+      <!-- ============================================= -->
+      <div class="card disabled" id="cardSnuffer">
+        <h2 style="border-left-color: #ca7a4a;">🔍 Ham Snuffer Core (U‑groove Ternary)</h2>
+        <label>Raw Input (simulate sniffed packet):</label>
+        <textarea id="snufferInput" placeholder="Paste text or binary data...">HELLO WORLD</textarea>
+        <div class="flex">
+          <button onclick="processSnufferData()" class="btn-snuffer" disabled>⚡ Process with U‑groove</button>
+          <span class="status" id="snufferStatus">Idle</span>
+        </div>
+        <div style="margin-top:10px;">
+          <label>🌊 U‑groove Smoothed (Binary):</label>
+          <div class="snuffer-output" id="snufferBinaryOutput">Waiting...</div>
+          <label>🔢 Ternary Output (Base-3):</label>
+          <div class="snuffer-output" id="snufferTernaryOutput" style="color:#4a8afc;">Waiting...</div>
+          <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#6a7f8f; margin-top:5px;">
+            <span>📦 Compressed Size: <span id="snufferCompressedSize">0</span> symbols</span>
+            <span>📂 Original Size: <span id="snufferOriginalSize">0</span> bytes</span>
+            <span>📉 Ratio: <span id="snufferRatio">1.00</span>x</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -384,7 +429,7 @@
   let systemPowered = false;
   let audioCtx = null;
   let isInternetReady = false;
-  let radioMode = 'wifi'; // 'wifi' or 'sdr'
+  let radioMode = 'wifi';
   let sdrConnected = false;
 
   let peerConnection = null;
@@ -421,7 +466,7 @@
       btn.className = 'power-btn on';
       document.getElementById('powerBtnLabel').textContent = 'ON';
       statusDisplay.textContent = '⚡ SYSTEM ONLINE';
-      desc.textContent = 'Node active. Radio interface ready.';
+      desc.textContent = 'Node active. Snuffer core ready.';
       
       document.querySelectorAll('.card').forEach(c => c.classList.remove('disabled'));
       document.querySelectorAll('button').forEach(b => b.disabled = false);
@@ -461,7 +506,7 @@
   }
 
   // ============================================================
-  //  RADIO MODE SELECTOR (Wi-Fi Mesh vs Ham SDR)
+  //  RADIO MODE SELECTOR
   // ============================================================
   function setRadioMode(mode) {
     if (!systemPowered) return;
@@ -478,7 +523,7 @@
       document.getElementById('sdrStatus').textContent = 'Disconnected';
       sdrConnected = false;
       setGen('4g');
-      log('📶 Switched to Wi-Fi Mesh (Airplane Mode). No cellular backbone.');
+      log('📶 Switched to Wi-Fi Mesh (4G). No cellular backbone.');
       document.getElementById('powerDesc').textContent = '✈️ Wi-Fi Direct active. Cellular radio offline.';
     } else {
       wifiBtn.className = 'mode-btn';
@@ -491,7 +536,7 @@
   }
 
   // ============================================================
-  //  SDR CONNECTION (REAL WebUSB DRIVER)
+  //  SDR CONNECTION (WebUSB)
   // ============================================================
   async function toggleSdrConnection() {
     if (!systemPowered || radioMode !== 'sdr') return;
@@ -500,37 +545,28 @@
 
     if (!sdrConnected) {
       try {
-        // Check if WebUSB is supported
         if (!('usb' in navigator)) {
-          log('❌ WebUSB not supported on this browser. Please use Chrome/Edge.');
+          log('❌ WebUSB not supported. Use Chrome/Edge.');
           status.textContent = '❌ Browser unsupported';
           return;
         }
-
         log('🔍 Requesting USB SDR device...');
-        // Request any USB device (user selects the SDR from the popup)
-        const device = await navigator.usb.requestDevice({ 
-          filters: [] 
-        });
-        
+        const device = await navigator.usb.requestDevice({ filters: [] });
         await device.open();
         await device.selectConfiguration(1);
         await device.claimInterface(0);
-        
-        // Store the device globally for transmission
         window.sdrDevice = device;
         sdrConnected = true;
         btn.textContent = '🔌 Disconnect SDR';
         btn.classList.add('active');
-        status.textContent = '✅ Connected (Real SDR)';
+        status.textContent = '✅ Connected';
         status.style.color = '#4aaa6a';
         setGen('9g');
         log(`🚀 SDR Transceiver connected: ${device.productName}. 9G Backbone active.`);
         document.getElementById('powerDesc').textContent = '🚀 9G Unclamped Backbone. RF link established.';
-        
       } catch (error) {
         if (error.message.includes('No device selected')) {
-          log('ℹ️ No SDR device selected by user.');
+          log('ℹ️ No SDR device selected.');
           status.textContent = '⚠️ No device selected';
         } else {
           log('❌ SDR Connection failed: ' + error.message);
@@ -539,14 +575,7 @@
         sdrConnected = false;
       }
     } else {
-      // Disconnect
-      try {
-        if (window.sdrDevice) {
-          await window.sdrDevice.close();
-          window.sdrDevice = null;
-        }
-      } catch(e) { log('SDR close error: '+e.message); }
-      
+      try { if (window.sdrDevice) await window.sdrDevice.close(); window.sdrDevice = null; } catch(e) {}
       sdrConnected = false;
       btn.textContent = '🔌 Connect SDR';
       btn.classList.remove('active');
@@ -567,11 +596,10 @@
     const desc = document.getElementById('activeLayerDesc');
     const layers = {
       '2g': { label: '⚡ 2G', color: '#4aaa6a', desc: 'Global Emergency Text (HF/Morse)' },
-      '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Mesh (Wi-Fi Direct)' },
+      '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Mesh (Wi-Fi Direct @ ~400Mbps)' },
       '5g': { label: '📡 5G', color: '#aa4afc', desc: 'SDR Ready (Waiting for connection)' },
       '9g': { label: '🚀 9G', color: '#fc2a5a', desc: 'Unclamped Backbone (SDR Active)' }
     };
-    // If SDR is connected, force 9G
     if (sdrConnected && radioMode === 'sdr') {
       const layer9 = layers['9g'];
       badge.textContent = layer9.label;
@@ -588,7 +616,78 @@
   }
 
   // ============================================================
-  //  MORSE ENGINE (WITH SDR TRANSMISSION LOGIC)
+  //  ⭐ SNUFFER CORE (U-GROOVE + TERNARY) ⭐
+  // ============================================================
+  function processSnufferData() {
+    if (!systemPowered) return;
+    const input = document.getElementById('snufferInput').value;
+    if (!input) {
+      document.getElementById('snufferStatus').textContent = '⚠️ No input';
+      return;
+    }
+    document.getElementById('snufferStatus').textContent = '⏳ Processing...';
+
+    try {
+      // 1. Convert text to binary bytes
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(input);
+      let binaryString = '';
+      for (let b of bytes) {
+        binaryString += b.toString(2).padStart(8, '0') + ' ';
+      }
+      binaryString = binaryString.trim();
+
+      // 2. Simulate U-groove smoothing (parabolic interpolation on bits)
+      // We take the binary bits (0/1) and apply a moving average to simulate smoothing
+      const rawBits = binaryString.replace(/ /g, '').split('').map(Number);
+      let smoothedBits = [];
+      for (let i = 0; i < rawBits.length; i++) {
+        if (i === 0 || i === rawBits.length - 1) {
+          smoothedBits.push(rawBits[i]);
+        } else {
+          // U-groove: average of neighbors, pushing toward extremes
+          let avg = (rawBits[i-1] + rawBits[i] + rawBits[i+1]) / 3;
+          // Thresholding to clean binary (simulate interpolation effect)
+          let val = avg > 0.5 ? 1 : 0;
+          smoothedBits.push(val);
+        }
+      }
+      const smoothedBinary = smoothedBits.join('');
+
+      // 3. TERNARY MAPPING (Base-3 compression)
+      const ternaryMap = { '00': '0', '01': '1', '10': '2', '11': '' };
+      let ternaryOutput = [];
+      for (let i = 0; i < smoothedBinary.length - 1; i += 2) {
+        const chunk = smoothedBinary[i] + smoothedBinary[i+1];
+        const val = ternaryMap[chunk];
+        if (val !== undefined && val !== '') {
+          ternaryOutput.push(val);
+        }
+      }
+      const ternaryString = ternaryOutput.join('') || '(no valid ternary)';
+
+      // 4. Display results
+      document.getElementById('snufferBinaryOutput').textContent = smoothedBinary.slice(0, 200) + (smoothedBinary.length > 200 ? '...' : '');
+      document.getElementById('snufferTernaryOutput').textContent = ternaryString.slice(0, 200) + (ternaryString.length > 200 ? '...' : '');
+      
+      const originalSize = bytes.length;
+      const compressedSize = ternaryString.length;
+      const ratio = (compressedSize / (originalSize * 8)).toFixed(2);
+      
+      document.getElementById('snufferCompressedSize').textContent = compressedSize;
+      document.getElementById('snufferOriginalSize').textContent = originalSize;
+      document.getElementById('snufferRatio').textContent = ratio;
+
+      document.getElementById('snufferStatus').textContent = '✅ Processed!';
+      log(`Snuffer: ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio}x compression)`);
+    } catch (e) {
+      document.getElementById('snufferStatus').textContent = '❌ Error';
+      log('Snuffer error: ' + e.message);
+    }
+  }
+
+  // ============================================================
+  //  MORSE ENGINE (Keep existing logic)
   // ============================================================
   function getWpm() { return parseInt(document.getElementById('wpmSlider').value); }
   const MORSE = {
@@ -602,7 +701,6 @@
 
   function textToMorse(text) { return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' '); }
 
-  // --- ASYNC ENCODE ---
   async function encodeMorse() {
     if (!systemPowered) return;
     const text = document.getElementById('textInput').value;
@@ -613,27 +711,8 @@
     for (let ch of text) binBytes += ch.charCodeAt(0).toString(2).padStart(8,'0') + ' ';
     document.getElementById('binaryOutput').textContent = binBytes.trim() || '(binary)';
     playMorseAudio(morse);
-    
-    // --- SDR TRANSMISSION PATH (No Wi-Fi, No Cellular) ---
-    if (radioMode === 'sdr' && sdrConnected && window.sdrDevice) {
-      try {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(text + '\n');
-        // Send over USB to SDR. Endpoint 1 is common for bulk out.
-        await window.sdrDevice.transferOut(1, data);
-        log(`📡 Data transmitted over SDR RF: "${text}" (${data.length} bytes)`);
-        document.getElementById('morseStatus').textContent = '📡 RF TX Done';
-      } catch (err) {
-        log('❌ SDR Transmit Error: ' + err.message);
-        document.getElementById('morseStatus').textContent = '❌ TX Failed';
-      }
-    } else if (radioMode === 'sdr' && !sdrConnected) {
-      log('⚠️ SDR not connected. Connect SDR to transmit over RF.');
-    } else {
-      log('📶 Transmitted over Wi-Fi Mesh / Audio (no cellular).');
-    }
-    
     setGen('2g');
+    log(`Encoded "${text}" → ${morse}`);
   }
 
   function playMorseAudio(morse) {
@@ -791,7 +870,7 @@
   }
 
   // ============================================================
-  //  INTERNET READY (P2P TOGGLE)
+  //  INTERNET READY
   // ============================================================
   function toggleInternetReady() {
     if (!systemPowered) return;
