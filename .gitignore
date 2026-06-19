@@ -1,5 +1,5 @@
 # ========================================
-# hamnet-SA-V1 .gitignore
+# hamnet-SA-V1 .gitignore (Updated for Backend)
 # ========================================
 
 # OS junk files
@@ -22,23 +22,31 @@ desktop.ini
 .cache/
 *.bak
 
-# Node.js (if you ever add a backend or build tools)
+# === PYTHON BACKEND SPECIFIC ===
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+backend/data/
+*.pcap
+*.cap
+*.pcapng
+
+# Node.js (if ever added)
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 package-lock.json
-yarn.lock
-.env
-.env.local
 
-# Build output (if you compile or bundle)
+# Build output
 dist/
 build/
 *.min.js
 *.min.css
 
-# SDR / radio hardware config dumps (just in case)
+# SDR / radio hardware config dumps
 *.sdr
 *.iq
 *.bin
@@ -55,10 +63,6 @@ build/
 *.avi
 *.mov
 
-# GitHub Pages junk (if you deploy)
-/.jekyll-cache/
-/_site/
-
-# User-specific local config (keep your license intact)
+# User-specific local config
 local-config.js
 user-settings.json
