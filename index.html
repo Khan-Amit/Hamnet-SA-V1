@@ -84,6 +84,8 @@
     button:hover { background: #3e5a72; transform: scale(1.02); }
     .btn-primary { background: #c44569; border-color: #e66a8a; }
     .btn-primary:hover { background: #d95a7a; }
+    .btn-green { background: #2a7a4a; border-color: #4aaa6a; }
+    .btn-green:hover { background: #3a9a5a; }
     .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .slider {
       width: 160px;
@@ -130,6 +132,18 @@
       padding: 6px;
       border-radius: 6px;
       resize: none;
+    }
+    .media-player {
+      width: 100%;
+      background: #0a0f15;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .media-player video, .media-player audio {
+      width: 100%;
+      max-height: 200px;
+      border-radius: 6px;
+      background: #000;
     }
     @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
   </style>
@@ -194,6 +208,26 @@
         <div class="log" id="voiceLog">Ready...</div>
       </div>
 
+      <!-- ==== NEW: OFFLINE MEDIA PLAYER (Google Drive ready) ==== -->
+      <div class="card">
+        <h2>📁 Offline Media Player (Local / Google Drive)</h2>
+        <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">
+          Download any audio/video from Google Drive to your computer, then load it here.
+        </p>
+        <div class="flex">
+          <button onclick="playSampleTone()" class="btn-green">🎵 Sample Morse Tone</button>
+          <label style="background:#2d3d4d; padding:8px 18px; border-radius:30px; cursor:pointer; border:1px solid #4a607a;">
+            📂 Choose File
+            <input type="file" id="fileInput" accept="audio/*,video/*" style="display:none;" onchange="loadLocalFile(event)">
+          </label>
+        </div>
+        <div class="media-player" id="mediaPlayerContainer">
+          <video id="localMediaPlayer" controls style="display:none;"></video>
+          <audio id="localAudioPlayer" controls style="display:none;"></audio>
+          <div id="mediaStatus" style="padding:10px; color:#6a7f8f; text-align:center;">No file loaded.</div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ===== RIGHT COLUMN ===== -->
@@ -241,7 +275,7 @@
   // ============================================================
   let audioCtx = null;
   let isInternetReady = false;
-  let wpm = 20; // words per minute
+  let wpm = 20;
   let peerConnection = null;
   let localStream = null;
   let remoteStream = null;
@@ -253,13 +287,12 @@
   log('hamnet-SA-V1 engine loaded.');
 
   // ============================================================
-  //  MORSE ENGINE
+  //  MORSE ENGINE (same as before)
   // ============================================================
   function getWpm() {
     return parseInt(document.getElementById('wpmSlider').value);
   }
 
-  // Morse code mapping (ITU)
   const MORSE = {
     'A':'.-','B':'-...','C':'-.-.','D':'-..','E':'.','F':'..-.','G':'--.','H':'....',
     'I':'..','J':'.---','K':'-.-','L':'.-..','M':'--','N':'-.','O':'---','P':'.--.',
@@ -267,32 +300,15 @@
     'Y':'-.--','Z':'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-',
     '5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',' ':' '
   };
-  const REV_MORSE = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
 
   function textToMorse(text) {
     return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' ');
-  }
-
-  function morseToBinary(morse) {
-    return morse.replace(/\./g,'0').replace(/\-/g,'1').replace(/ /g,' ');
-  }
-
-  function binaryToAscii(binStr) {
-    const bytes = binStr.split(' ');
-    let ascii = '';
-    for (let b of bytes) {
-      if (b.length === 8) {
-        ascii += String.fromCharCode(parseInt(b, 2));
-      }
-    }
-    return ascii;
   }
 
   function encodeMorse() {
     const text = document.getElementById('textInput').value;
     if (!text.trim()) return;
     const morse = textToMorse(text);
-    const binary = morseToBinary(morse);
     document.getElementById('morseOutput').textContent = morse;
     let binBytes = '';
     for (let ch of text) {
@@ -335,25 +351,23 @@
   }
 
   // ============================================================
-  //  DECODE FROM MICROPHONE
+  //  DECODE FROM MIC (stub)
   // ============================================================
-  let micStream = null;
-  let micAnalyser = null;
   let isDecoding = false;
+  let micAnalyser = null;
 
   function decodeFromMic() {
     if (isDecoding) { log('Already decoding.'); return; }
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then(stream => {
-        micStream = stream;
         const source = audioCtx.createMediaStreamSource(stream);
         micAnalyser = audioCtx.createAnalyser();
         micAnalyser.fftSize = 2048;
         source.connect(micAnalyser);
         isDecoding = true;
         document.getElementById('morseStatus').textContent = 'Listening...';
-        log('Microphone active. Speak/send Morse.');
+        log('Microphone active.');
         detectMorse();
       })
       .catch(err => { log('Mic error: '+err.message); });
@@ -366,12 +380,7 @@
     let sum = 0;
     for (let i=0; i<buffer.length; i++) sum += buffer[i]*buffer[i];
     const rms = Math.sqrt(sum / buffer.length);
-    const threshold = 0.02;
-    if (rms > threshold) {
-      document.getElementById('morseStatus').textContent = '🔊 Signal detected';
-    } else {
-      document.getElementById('morseStatus').textContent = '⏺️ Listening...';
-    }
+    document.getElementById('morseStatus').textContent = rms > 0.02 ? '🔊 Signal' : '⏺️ Listening...';
     setTimeout(detectMorse, 200);
   }
 
@@ -388,8 +397,6 @@
         recordedChunks = [];
         mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
         mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, { type: 'audio/webm' });
-          const url = URL.createObjectURL(blob);
           document.getElementById('voiceLog').textContent = 'Voice recorded and decoded to: "HELLO FROM VOICE" (simulated)';
           log('Voice test completed.');
         };
@@ -404,13 +411,13 @@
   }
 
   // ============================================================
-  //  INTERNET READY (WebRTC)
+  //  INTERNET READY
   // ============================================================
   function toggleInternetReady() {
     isInternetReady = !isInternetReady;
     document.getElementById('internetStatus').textContent = isInternetReady ? 'ON' : 'OFF';
     document.getElementById('internetBtn').style.background = isInternetReady ? '#2a7a4a' : '#2d3d4d';
-    log(`Internet Ready mode ${isInternetReady ? 'activated' : 'deactivated'}`);
+    log(`Internet Ready ${isInternetReady ? 'activated' : 'deactivated'}`);
   }
 
   // ============================================================
@@ -438,7 +445,7 @@
       if (!event.candidate) {
         const offer = peerConnection.localDescription;
         document.getElementById('offerSdp').value = offer.sdp;
-        log('Offer created. Copy SDP to peer.');
+        log('Offer created.');
       }
     };
     peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer))
@@ -453,6 +460,69 @@
     peerConnection.setRemoteDescription(answer)
       .then(() => log('Answer applied, connection established.'))
       .catch(e => log('Answer error: '+e.message));
+  }
+
+  // ============================================================
+  //  ★ NEW: OFFLINE MEDIA PLAYER (Local & Google Drive)
+  // ============================================================
+  function playSampleTone() {
+    // Uses Web Audio to generate a clean "V" Morse tone (...-) as a sample – fully offline!
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const dotDur = 0.1; // 100ms dots
+    const freq = 880;
+    const pattern = '...-'; // Morse for "V"
+    let time = audioCtx.currentTime;
+    
+    for (let sym of pattern) {
+      const dur = sym === '.' ? dotDur : dotDur * 3;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.4, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(time);
+      osc.stop(time + dur);
+      time += dur + dotDur;
+    }
+    document.getElementById('mediaStatus').textContent = '🔊 Sample Morse tone (V = ...-) played!';
+    log('Sample tone played.');
+  }
+
+  function loadLocalFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+    const isVideo = file.type.startsWith('video/');
+    const videoEl = document.getElementById('localMediaPlayer');
+    const audioEl = document.getElementById('localAudioPlayer');
+    const status = document.getElementById('mediaStatus');
+
+    // Hide both, show the right one
+    videoEl.style.display = 'none';
+    audioEl.style.display = 'none';
+    videoEl.pause();
+    audioEl.pause();
+
+    if (isVideo) {
+      videoEl.src = url;
+      videoEl.style.display = 'block';
+      videoEl.load();
+      videoEl.play().catch(() => {});
+      status.textContent = `▶️ Playing: ${file.name}`;
+    } else if (file.type.startsWith('audio/')) {
+      audioEl.src = url;
+      audioEl.style.display = 'block';
+      audioEl.load();
+      audioEl.play().catch(() => {});
+      status.textContent = `🔊 Playing: ${file.name}`;
+    } else {
+      status.textContent = '⚠️ Unsupported file type. Please select audio or video.';
+    }
+    log(`Loaded local file: ${file.name} (${file.type})`);
   }
 
   // ============================================================
