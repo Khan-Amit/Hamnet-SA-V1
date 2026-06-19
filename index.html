@@ -403,23 +403,18 @@
             <span>📂 Original Size: <span id="snufferOriginalSize">0</span> bytes</span>
             <span>📉 Ratio: <span id="snufferRatio">1.00</span>x</span>
           </div>
-          <div id="backendStatus" style="margin-top:5px; font-size:0.7rem; color:#6a7f8f;">🔌 Backend: <span id="backendStatusText">Unknown</span></div>
+          <div id="backendStatus" style="margin-top:5px; font-size:0.7rem; color:#6a7f8f;">⚡ Engine: <span id="backendStatusText">Native JS</span></div>
         </div>
       </div>
     </div>
   </div>
 
-  <div style="text-align:center; color:#5a6f7f; font-size:0.8rem; margin-top:25px; border-top:1px solid #2a3a4a; padding-top:15px;">
+  <div style="text-align:center; color:#5a7f8f; font-size:0.8rem; margin-top:25px; border-top:1px solid #2a3a4a; padding-top:15px;">
     <p>Concept: <strong>Seliim Ahmed</strong> · amit.khanna.1082@gmail.com</p>
   </div>
 </div>
 
 <script>
-  // ============================================================
-  //  CODESPACE BACKEND URL (CHANGE THIS IF YOUR URL CHANGES)
-  // ============================================================
-  const BACKEND_URL = 'https://studious-parakeet-p7wp9j7qjq926g9g-5000.github.dev/process';
-
   // ============================================================
   //  GLOBALS
   // ============================================================
@@ -473,13 +468,11 @@
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
       
-      // ============================================================
-      //  🧹 KILL THE GHOST PLACEHOLDER (CLEARS INITIAL TEXT)
-      // ============================================================
+      // KILL THE GHOST
       document.getElementById('eventLog').textContent = '';
       
       document.getElementById('morseStatus').textContent = 'Idle';
-      checkBackendStatus();
+      document.getElementById('backendStatusText').textContent = 'Native JS';
     } else {
       btn.className = 'power-btn off';
       document.getElementById('powerBtnLabel').textContent = 'START';
@@ -506,26 +499,6 @@
       sdrConnected = false;
       document.getElementById('sdrConnectBtn').classList.remove('active');
       log('⛔ SYSTEM SHUTDOWN. All streams closed.');
-    }
-  }
-
-  // ============================================================
-  //  BACKEND STATUS CHECK
-  // ============================================================
-  async function checkBackendStatus() {
-    try {
-      const response = await fetch(BACKEND_URL.replace('/process', '/ping'), { method: 'GET' });
-      if (response.ok) {
-        document.getElementById('backendStatusText').textContent = '✅ Connected (Python)';
-        document.getElementById('backendStatusText').style.color = '#4aaa6a';
-        log('✅ Python backend is reachable.');
-      } else {
-        throw new Error('Not reachable');
-      }
-    } catch (e) {
-      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
-      document.getElementById('backendStatusText').style.color = '#ca7a4a';
-      log('⚠️ Python backend not found. Using JavaScript fallback.');
     }
   }
 
@@ -640,9 +613,9 @@
   }
 
   // ============================================================
-  //  ⭐ SNUFFER CORE (U-GROOVE + TERNARY) WITH CODESPACE BRIDGE ⭐
+  //  ⭐ SNUFFER CORE (PURE JAVASCRIPT - NO PYTHON) ⭐
   // ============================================================
-  async function processSnufferData() {
+  function processSnufferData() {
     if (!systemPowered) return;
     const input = document.getElementById('snufferInput').value;
     if (!input) {
@@ -650,43 +623,12 @@
       return;
     }
     document.getElementById('snufferStatus').textContent = '⏳ Processing...';
-
-    try {
-      const response = await fetch(BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: input })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success) {
-          document.getElementById('snufferBinaryOutput').textContent = result.binary || '(empty)';
-          document.getElementById('snufferTernaryOutput').textContent = result.ternary || '(empty)';
-          document.getElementById('snufferCompressedSize').textContent = result.compressed_size || 0;
-          document.getElementById('snufferOriginalSize').textContent = result.original_size || 0;
-          document.getElementById('snufferRatio').textContent = (result.ratio || 1.0).toFixed(4);
-          document.getElementById('snufferStatus').textContent = '✅ Python backend processed!';
-          document.getElementById('backendStatusText').textContent = '✅ Connected (Python)';
-          document.getElementById('backendStatusText').style.color = '#4aaa6a';
-          log(`Snuffer (Python): ${result.original_size} bytes → ${result.compressed_size} ternary symbols (${result.ratio.toFixed(4)}x)`);
-          return;
-        }
-      }
-      document.getElementById('snufferStatus').textContent = '⚠️ Backend error, using JS fallback...';
-      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
-      document.getElementById('backendStatusText').style.color = '#ca7a4a';
-      processSnufferDataJS();
-    } catch (error) {
-      document.getElementById('snufferStatus').textContent = '⚠️ Backend offline, using JS fallback...';
-      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
-      document.getElementById('backendStatusText').style.color = '#ca7a4a';
-      processSnufferDataJS();
-    }
+    // Directly call the JS engine
+    processSnufferDataJS();
   }
 
   // ============================================================
-  //  JAVASCRIPT FALLBACK (CORRECTED U-GROOVE)
+  //  PURE JAVASCRIPT U-GROOVE ENGINE (THE "JSON" ALTERNATIVE)
   // ============================================================
   function processSnufferDataJS() {
     const input = document.getElementById('snufferInput').value;
@@ -700,9 +642,7 @@
         binaryString += b.toString(2).padStart(8, '0');
       }
       
-      // ---- CORRECTED U-GROOVE SMOOTHING ----
-      // Weighted majority vote: center has weight 2, neighbors weight 1.
-      // If sum > 2, bit is 1; otherwise 0.
+      // ---- U-GROOVE SMOOTHING (Weighted Majority Vote) ----
       const rawBits = binaryString.split('').map(Number);
       let smoothedBits = [];
       for (let i = 0; i < rawBits.length; i++) {
@@ -735,8 +675,9 @@
       document.getElementById('snufferCompressedSize').textContent = compressedSize;
       document.getElementById('snufferOriginalSize').textContent = originalSize;
       document.getElementById('snufferRatio').textContent = ratio.toFixed(4);
-      document.getElementById('snufferStatus').textContent = '✅ JS fallback processed!';
-      log(`Snuffer (JS): ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio.toFixed(4)}x)`);
+      document.getElementById('snufferStatus').textContent = '✅ Processed!';
+      document.getElementById('backendStatusText').textContent = 'Native JS (JSON)';
+      log(`⚡ Snuffer Engine: Native JS. ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio.toFixed(4)}x)`);
     } catch (e) {
       document.getElementById('snufferStatus').textContent = '❌ Error';
       log('Snuffer error: ' + e.message);
