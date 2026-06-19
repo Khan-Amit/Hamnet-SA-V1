@@ -61,18 +61,49 @@
       justify-content: center;
       line-height: 1.2;
     }
-    .power-btn.on {
-      background: #2a7a4a;
-      border-color: #4aaa6a;
-      box-shadow: 0 0 30px rgba(74, 170, 106, 0.4);
-    }
-    .power-btn.off {
-      background: #6a2a2a;
-      border-color: #aa4a4a;
-      box-shadow: 0 0 30px rgba(170, 74, 74, 0.4);
-    }
+    .power-btn.on { background: #2a7a4a; border-color: #4aaa6a; box-shadow: 0 0 30px rgba(74, 170, 106, 0.4); }
+    .power-btn.off { background: #6a2a2a; border-color: #aa4a4a; box-shadow: 0 0 30px rgba(170, 74, 74, 0.4); }
     .power-status { font-size: 1.5rem; font-weight: bold; }
     .power-desc { color: #6a7f8f; font-size: 0.9rem; }
+
+    /* RADIO MODE SELECTOR */
+    .radio-selector {
+      background: #0d141c;
+      border-radius: 12px;
+      padding: 15px 20px;
+      margin-bottom: 20px;
+      border: 1px solid #2f3b48;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .mode-group { display: flex; gap: 10px; flex-wrap: wrap; }
+    .mode-btn {
+      padding: 8px 20px;
+      border-radius: 30px;
+      border: 2px solid #3a4a5a;
+      background: transparent;
+      color: #8899aa;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .mode-btn.active-wifi { border-color: #4a8afc; background: #1a2a4a; color: #4a8afc; }
+    .mode-btn.active-sdr { border-color: #fc2a5a; background: #4a1a2a; color: #fc2a5a; }
+    .mode-btn:hover { opacity: 0.8; }
+    .sdr-connect-btn {
+      background: #2a3a4a;
+      border: 1px solid #4a607a;
+      color: white;
+      padding: 8px 18px;
+      border-radius: 30px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .sdr-connect-btn.active { background: #2a7a4a; border-color: #4aaa6a; }
+    .sdr-connect-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .grid {
       display: grid;
@@ -88,11 +119,7 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
       transition: opacity 0.3s, filter 0.3s;
     }
-    .card.disabled {
-      opacity: 0.4;
-      filter: grayscale(0.8);
-      pointer-events: none;
-    }
+    .card.disabled { opacity: 0.4; filter: grayscale(0.8); pointer-events: none; }
     .card h2 {
       font-size: 1.3rem;
       margin-bottom: 12px;
@@ -151,13 +178,7 @@
       word-break: break-all;
     }
     .video-container { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
-    .video-container video {
-      width: 45%;
-      min-width: 200px;
-      background: #000;
-      border-radius: 8px;
-      border: 2px solid #3f5a6a;
-    }
+    .video-container video { width: 45%; min-width: 200px; background: #000; border-radius: 8px; border: 2px solid #3f5a6a; }
     .sdp-box {
       width: 100%;
       height: 70px;
@@ -227,6 +248,19 @@
     </button>
   </div>
 
+  <!-- ===== RADIO MODE SELECTOR (Wi-Fi Mesh vs Ham SDR) ===== -->
+  <div class="radio-selector" id="radioSelector">
+    <div style="font-weight:bold; color:#8899aa;">📻 TRANSCEIVER MODE</div>
+    <div class="mode-group">
+      <button id="modeWifiBtn" class="mode-btn active-wifi" onclick="setRadioMode('wifi')">✈️ Wi-Fi Mesh (Airplane Mode)</button>
+      <button id="modeSdrBtn" class="mode-btn" onclick="setRadioMode('sdr')">📡 External Ham SDR</button>
+    </div>
+    <div>
+      <button id="sdrConnectBtn" class="sdr-connect-btn" disabled onclick="toggleSdrConnection()">🔌 Connect SDR</button>
+      <span class="status" id="sdrStatus">Disconnected</span>
+    </div>
+  </div>
+
   <!-- ===== NETWORK GENERATION DASHBOARD ===== -->
   <div class="card gen-dashboard" id="genCard">
     <h2>🚀 LIVE NETWORK GENERATION</h2>
@@ -240,7 +274,7 @@
     <div class="gen-desc" id="activeLayerDesc">Press START to initialize hardware</div>
   </div>
 
-  <!-- ===== MAIN GRID (All cards disabled until START) ===== -->
+  <!-- ===== MAIN GRID ===== -->
   <div class="grid" id="mainGrid">
 
     <!-- LEFT COLUMN -->
@@ -345,11 +379,14 @@
 
 <script>
   // ============================================================
-  //  MASTER POWER CONTROL (THE ON/OFF BRAIN)
+  //  GLOBALS
   // ============================================================
   let systemPowered = false;
   let audioCtx = null;
   let isInternetReady = false;
+  let radioMode = 'wifi'; // 'wifi' or 'sdr'
+  let sdrConnected = false;
+
   let peerConnection = null;
   let localStream = null;
   let remoteStream = null;
@@ -369,6 +406,9 @@
     el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + el.textContent;
   };
 
+  // ============================================================
+  //  MASTER POWER
+  // ============================================================
   function toggleMasterPower() {
     systemPowered = !systemPowered;
     const btn = document.getElementById('masterPowerBtn');
@@ -378,69 +418,106 @@
     const layerDesc = document.getElementById('activeLayerDesc');
 
     if (systemPowered) {
-      // ---- POWER ON ----
       btn.className = 'power-btn on';
       document.getElementById('powerBtnLabel').textContent = 'ON';
       statusDisplay.textContent = '⚡ SYSTEM ONLINE';
-      desc.textContent = 'Node active. Hardware initialized.';
+      desc.textContent = 'Node active. Radio interface ready.';
       
-      // Enable all cards
       document.querySelectorAll('.card').forEach(c => c.classList.remove('disabled'));
       document.querySelectorAll('button').forEach(b => b.disabled = false);
       
-      // Init Audio Context
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
-      // Set Gen to 2G (Default)
-      badge.textContent = '⚡ 2G';
-      badge.style.borderColor = '#4aaa6a';
-      badge.style.boxShadow = '0 0 30px #4aaa6a66';
-      layerDesc.textContent = 'Global Emergency Text (HF/Morse)';
+      // Default to Wi-Fi mode
+      setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
       document.getElementById('morseStatus').textContent = 'Idle';
     } else {
-      // ---- POWER OFF (KILL EVERYTHING) ----
       btn.className = 'power-btn off';
       document.getElementById('powerBtnLabel').textContent = 'START';
       statusDisplay.textContent = '⛔ SYSTEM OFFLINE';
       desc.textContent = 'Press START to boot the mesh node';
       
-      // Disable all cards
       document.querySelectorAll('.card').forEach(c => c.classList.add('disabled'));
       document.querySelectorAll('button').forEach(b => b.disabled = true);
       
-      // Kill audio
       if (audioCtx && audioCtx.state === 'running') audioCtx.close();
       audioCtx = null;
-      
-      // Kill mic
       if (isDecoding) stopDecoding();
-      if (micAnalyser) { micAnalyser = null; }
+      if (micAnalyser) micAnalyser = null;
+      if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; document.getElementById('localVideo').srcObject = null; }
+      if (peerConnection) { peerConnection.close(); peerConnection = null; }
       
-      // Kill camera
-      if (localStream) {
-        localStream.getTracks().forEach(t => t.stop());
-        localStream = null;
-        document.getElementById('localVideo').srcObject = null;
-      }
-      if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-      }
-      
-      // Reset UI
       badge.textContent = '⏻ OFFLINE';
       badge.style.borderColor = '#fc5c7d';
       badge.style.boxShadow = '0 0 20px rgba(252,92,125,0.3)';
       layerDesc.textContent = 'Press START to initialize hardware';
       document.getElementById('internetStatus').textContent = 'OFF';
       document.getElementById('morseStatus').textContent = 'Offline';
+      document.getElementById('sdrStatus').textContent = 'Disconnected';
+      sdrConnected = false;
+      document.getElementById('sdrConnectBtn').classList.remove('active');
       log('⛔ SYSTEM SHUTDOWN. All streams closed.');
     }
   }
 
   // ============================================================
-  //  GENERATION SETTER (Overlay for the badge)
+  //  RADIO MODE SELECTOR (Wi-Fi Mesh vs Ham SDR)
+  // ============================================================
+  function setRadioMode(mode) {
+    if (!systemPowered) return;
+    radioMode = mode;
+    const wifiBtn = document.getElementById('modeWifiBtn');
+    const sdrBtn = document.getElementById('modeSdrBtn');
+    const sdrConnect = document.getElementById('sdrConnectBtn');
+
+    if (mode === 'wifi') {
+      wifiBtn.className = 'mode-btn active-wifi';
+      sdrBtn.className = 'mode-btn';
+      sdrConnect.disabled = true;
+      sdrConnect.classList.remove('active');
+      document.getElementById('sdrStatus').textContent = 'Disconnected';
+      sdrConnected = false;
+      setGen('4g');
+      log('📶 Switched to Wi-Fi Mesh (Airplane Mode). No cellular backbone.');
+      document.getElementById('powerDesc').textContent = '✈️ Wi-Fi Direct active. Cellular radio offline.';
+    } else {
+      wifiBtn.className = 'mode-btn';
+      sdrBtn.className = 'mode-btn active-sdr';
+      sdrConnect.disabled = false;
+      setGen('5g'); // Shows 5G until connected, then 9G
+      log('📡 Switched to External Ham SDR mode. Waiting for USB connection.');
+      document.getElementById('powerDesc').textContent = '📡 SDR mode. Connect your transceiver via USB.';
+    }
+  }
+
+  function toggleSdrConnection() {
+    if (!systemPowered || radioMode !== 'sdr') return;
+    const btn = document.getElementById('sdrConnectBtn');
+    const status = document.getElementById('sdrStatus');
+    
+    sdrConnected = !sdrConnected;
+    if (sdrConnected) {
+      btn.textContent = '🔌 Disconnect SDR';
+      btn.classList.add('active');
+      status.textContent = '✅ Connected (Simulated)';
+      status.style.color = '#4aaa6a';
+      setGen('9g');
+      log('🚀 SDR Transceiver connected. 9G Backbone active.');
+      document.getElementById('powerDesc').textContent = '🚀 9G Unclamped Backbone. RF link established.';
+    } else {
+      btn.textContent = '🔌 Connect SDR';
+      btn.classList.remove('active');
+      status.textContent = 'Disconnected';
+      status.style.color = '#e0e6ed';
+      setGen('5g');
+      log('SDR Disconnected. Falling back to 5G ready state.');
+      document.getElementById('powerDesc').textContent = '📡 SDR mode. Connect your transceiver via USB.';
+    }
+  }
+
+  // ============================================================
+  //  GENERATION SETTER
   // ============================================================
   function setGen(mode) {
     if (!systemPowered) return;
@@ -448,20 +525,28 @@
     const desc = document.getElementById('activeLayerDesc');
     const layers = {
       '2g': { label: '⚡ 2G', color: '#4aaa6a', desc: 'Global Emergency Text (HF/Morse)' },
-      '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Video/File (Wi‑Fi Direct)' },
-      '5g': { label: '📡 5G', color: '#aa4afc', desc: 'City Mesh Backhaul (SDR 100MHz)' },
-      '9g': { label: '🚀 9G', color: '#fc2a5a', desc: 'Unclamped Internet Backbone (4GHz+)' }
+      '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Mesh (Wi-Fi Direct)' },
+      '5g': { label: '📡 5G', color: '#aa4afc', desc: 'SDR Ready (Waiting for connection)' },
+      '9g': { label: '🚀 9G', color: '#fc2a5a', desc: 'Unclamped Backbone (SDR Active)' }
     };
-    const layer = layers[mode] || layers['2g'];
+    // If SDR is connected, force 9G regardless
+    if (sdrConnected && radioMode === 'sdr') {
+      const layer9 = layers['9g'];
+      badge.textContent = layer9.label;
+      badge.style.borderColor = layer9.color;
+      badge.style.boxShadow = `0 0 30px ${layer9.color}66`;
+      if (desc) desc.textContent = layer9.desc;
+      return;
+    }
+    const layer = layers[mode] || layers['4g'];
     badge.textContent = layer.label;
     badge.style.borderColor = layer.color;
     badge.style.boxShadow = `0 0 30px ${layer.color}66`;
     if (desc) desc.textContent = layer.desc;
-    log(`Network generation switched to ${layer.label}`);
   }
 
   // ============================================================
-  //  MORSE ENGINE (Same as before, but checks systemPowered)
+  //  MORSE ENGINE (Unchanged logic, but uses systemPowered)
   // ============================================================
   function getWpm() { return parseInt(document.getElementById('wpmSlider').value); }
   const MORSE = {
@@ -521,7 +606,7 @@
   }
 
   // ============================================================
-  //  MIC DECODER (State machine)
+  //  MIC DECODER (Real state machine)
   // ============================================================
   function decodeFromMic() {
     if (!systemPowered || isDecoding) return;
@@ -644,27 +729,30 @@
   }
 
   // ============================================================
-  //  INTERNET READY (9G TOGGLE)
+  //  INTERNET READY (P2P TOGGLE)
   // ============================================================
   function toggleInternetReady() {
     if (!systemPowered) return;
     isInternetReady = !isInternetReady;
     document.getElementById('internetStatus').textContent = isInternetReady ? 'ON' : 'OFF';
     document.getElementById('internetBtn').style.background = isInternetReady ? '#2a7a4a' : '#2d3d4d';
-    if (isInternetReady) setGen('9g');
+    if (isInternetReady && radioMode === 'wifi') setGen('4g');
+    else if (isInternetReady && radioMode === 'sdr' && sdrConnected) setGen('9g');
+    else if (isInternetReady && radioMode === 'sdr') setGen('5g');
     else setGen('2g');
+    log(`Internet Ready ${isInternetReady ? 'activated' : 'deactivated'}`);
   }
 
   // ============================================================
-  //  VIDEO P2P (4G/5G local)
+  //  VIDEO P2P
   // ============================================================
   async function startVideo() {
     if (!systemPowered) return;
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       document.getElementById('localVideo').srcObject = localStream;
-      setGen('4g');
-      log('Camera started → 4G+ mode.');
+      if (radioMode === 'wifi') setGen('4g');
+      log('Camera started.');
     } catch (e) { log('Camera error: '+e.message); }
   }
 
