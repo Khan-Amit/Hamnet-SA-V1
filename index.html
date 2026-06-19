@@ -31,7 +31,6 @@
     }
     .sub { color: #8899aa; font-size: 1rem; letter-spacing: 2px; }
     
-    /* MASTER POWER CARD */
     .power-card {
       background: #1a212a;
       border-radius: 16px;
@@ -66,7 +65,6 @@
     .power-status { font-size: 1.5rem; font-weight: bold; }
     .power-desc { color: #6a7f8f; font-size: 0.9rem; }
 
-    /* RADIO MODE SELECTOR */
     .radio-selector {
       background: #0d141c;
       border-radius: 12px;
@@ -276,7 +274,7 @@
     </div>
   </div>
 
-  <!-- NETWORK GENERATION DASHBOARD -->
+  <!-- NETWORK GENERATION -->
   <div class="card gen-dashboard" id="genCard">
     <h2>🚀 LIVE NETWORK GENERATION</h2>
     <div><span class="gen-badge" id="genBadge">⏻ OFFLINE</span></div>
@@ -294,7 +292,6 @@
 
     <!-- LEFT COLUMN -->
     <div>
-      <!-- MORSE TRANSLATOR -->
       <div class="card disabled" id="cardMorse">
         <h2>📡 Morse ↔ Binary ↔ ASCII</h2>
         <label>Input text:</label>
@@ -315,7 +312,6 @@
         </div>
       </div>
 
-      <!-- SPEED & TRANSFER -->
       <div class="card disabled" id="cardSpeed">
         <h2>⚙️ Speed & Internet‑Ready</h2>
         <div class="flex">
@@ -333,7 +329,6 @@
         </div>
       </div>
 
-      <!-- VOICE TEST -->
       <div class="card disabled" id="cardVoice">
         <h2>🎤 Voice Transmission Test</h2>
         <div class="flex">
@@ -344,7 +339,6 @@
         <audio id="voicePlayback" controls style="width:100%; margin-top:6px; display:none;"></audio>
       </div>
 
-      <!-- OFFLINE MEDIA -->
       <div class="card disabled" id="cardMedia">
         <h2>📁 Offline Media Player</h2>
         <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">Load local audio/video files.</p>
@@ -365,7 +359,6 @@
 
     <!-- RIGHT COLUMN -->
     <div>
-      <!-- VIDEO P2P -->
       <div class="card disabled" id="cardVideo">
         <h2>📹 Video (P2P, no internet)</h2>
         <div class="video-container">
@@ -385,7 +378,6 @@
         </div>
       </div>
 
-      <!-- SYSTEM LOG -->
       <div class="card disabled" id="cardLog">
         <h2>📋 Event Log</h2>
         <div class="log" id="eventLog">System offline. Press START.</div>
@@ -423,6 +415,11 @@
 
 <script>
   // ============================================================
+  //  CODESPACE BACKEND URL (CHANGE THIS IF YOUR URL CHANGES)
+  // ============================================================
+  const BACKEND_URL = 'https://studious-parakeet-p7wp9j7qjq926g9g-5000.github.dev/process';
+
+  // ============================================================
   //  GLOBALS
   // ============================================================
   let systemPowered = false;
@@ -430,12 +427,6 @@
   let isInternetReady = false;
   let radioMode = 'wifi';
   let sdrConnected = false;
-
-  // ============================================================
-  //  CODESPACE BACKEND URL (FIXED FOR YOUR ENVIRONMENT)
-  //  Replace this with your actual Codespace backend URL if it changes.
-  // ============================================================
-  const BACKEND_URL = 'https://studious-parakeet-p7wp9j7qjq926g9g-5000.github.dev/process';
 
   let peerConnection = null;
   let localStream = null;
@@ -481,7 +472,6 @@
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
       document.getElementById('morseStatus').textContent = 'Idle';
-      // Check backend status
       checkBackendStatus();
     } else {
       btn.className = 'power-btn off';
@@ -655,7 +645,6 @@
     document.getElementById('snufferStatus').textContent = '⏳ Processing...';
 
     try {
-      // 1. Try to reach the Python backend (Codespace)
       const response = await fetch(BACKEND_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -677,13 +666,11 @@
           return;
         }
       }
-      // If backend fails, fallback to JS
       document.getElementById('snufferStatus').textContent = '⚠️ Backend error, using JS fallback...';
       document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
       document.getElementById('backendStatusText').style.color = '#ca7a4a';
       processSnufferDataJS();
     } catch (error) {
-      // Backend unreachable -> use JS fallback
       document.getElementById('snufferStatus').textContent = '⚠️ Backend offline, using JS fallback...';
       document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
       document.getElementById('backendStatusText').style.color = '#ca7a4a';
@@ -692,7 +679,7 @@
   }
 
   // ============================================================
-  //  JAVASCRIPT FALLBACK (The original simulation)
+  //  JAVASCRIPT FALLBACK (CORRECTED U-GROOVE)
   // ============================================================
   function processSnufferDataJS() {
     const input = document.getElementById('snufferInput').value;
@@ -703,32 +690,36 @@
       const bytes = encoder.encode(input);
       let binaryString = '';
       for (let b of bytes) {
-        binaryString += b.toString(2).padStart(8, '0') + ' ';
+        binaryString += b.toString(2).padStart(8, '0');
       }
-      binaryString = binaryString.trim().replace(/ /g, '');
       
-      // Simulate U-groove smoothing
+      // ---- CORRECTED U-GROOVE SMOOTHING ----
+      // Weighted majority vote: center has weight 2, neighbors weight 1.
+      // If sum > 2, bit is 1; otherwise 0.
       const rawBits = binaryString.split('').map(Number);
       let smoothedBits = [];
       for (let i = 0; i < rawBits.length; i++) {
-        if (i === 0 || i === rawBits.length - 1) {
-          smoothedBits.push(rawBits[i]);
-        } else {
-          let avg = (rawBits[i-1] + rawBits[i] + rawBits[i+1]) / 3;
-          smoothedBits.push(avg > 0.5 ? 1 : 0);
-        }
+        let center = rawBits[i];
+        let left = (i > 0) ? rawBits[i - 1] : center;
+        let right = (i < rawBits.length - 1) ? rawBits[i + 1] : center;
+        let sum = (center * 2) + left + right;
+        smoothedBits.push(sum > 2 ? 1 : 0);
       }
       const smoothedBinary = smoothedBits.join('');
       
+      // ---- TERNARY MAPPING (Base-3) ----
       const ternaryMap = { '00': '0', '01': '1', '10': '2', '11': '' };
       let ternaryOutput = [];
       for (let i = 0; i < smoothedBinary.length - 1; i += 2) {
-        const chunk = smoothedBinary[i] + smoothedBinary[i+1];
+        const chunk = smoothedBinary[i] + smoothedBinary[i + 1];
         const val = ternaryMap[chunk];
-        if (val !== undefined && val !== '') ternaryOutput.push(val);
+        if (val !== undefined && val !== '') {
+          ternaryOutput.push(val);
+        }
       }
       const ternaryString = ternaryOutput.join('') || '(no valid ternary)';
       
+      // ---- DISPLAY RESULTS ----
       document.getElementById('snufferBinaryOutput').textContent = smoothedBinary.slice(0, 200) + (smoothedBinary.length > 200 ? '...' : '');
       document.getElementById('snufferTernaryOutput').textContent = ternaryString.slice(0, 200) + (ternaryString.length > 200 ? '...' : '');
       const originalSize = bytes.length;
@@ -746,7 +737,7 @@
   }
 
   // ============================================================
-  //  MORSE ENGINE (Keep existing logic)
+  //  MORSE ENGINE
   // ============================================================
   function getWpm() { return parseInt(document.getElementById('wpmSlider').value); }
   const MORSE = {
