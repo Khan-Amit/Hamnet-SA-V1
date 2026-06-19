@@ -378,15 +378,13 @@
         </div>
       </div>
 
-      <!-- SYSTEM LOG -->
+      <!-- SYSTEM LOG (CLEAN PLACEHOLDER) -->
       <div class="card disabled" id="cardLog">
         <h2>📋 Event Log</h2>
-        <div class="log" id="eventLog">System offline. Press START.</div>
+        <div class="log" id="eventLog">⏻ Standby. Press START.</div>
       </div>
 
-      <!-- ================================================ -->
-      <!--  HAM SNUFFER CORE (U-GROOVE TERNARY)            -->
-      <!-- ================================================ -->
+      <!-- HAM SNUFFER CORE (U-GROOVE TERNARY) -->
       <div class="card disabled" id="cardSnuffer">
         <h2 style="border-left-color: #ca7a4a;">🔍 Ham Snuffer Core (U‑groove Ternary)</h2>
         <label>Raw Input (simulate sniffed packet):</label>
@@ -451,7 +449,7 @@
   };
 
   // ============================================================
-  //  MASTER POWER
+  //  MASTER POWER (WITH GHOST KILLER)
   // ============================================================
   function toggleMasterPower() {
     systemPowered = !systemPowered;
@@ -474,6 +472,12 @@
       
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
+      
+      // ============================================================
+      //  🧹 KILL THE GHOST PLACEHOLDER (CLEARS INITIAL TEXT)
+      // ============================================================
+      document.getElementById('eventLog').textContent = '';
+      
       document.getElementById('morseStatus').textContent = 'Idle';
       checkBackendStatus();
     } else {
@@ -1021,7 +1025,7 @@
   //  INIT
   // ============================================================
   document.addEventListener('DOMContentLoaded', () => {
-    log('hamnet-SA-V1 loaded. Press START.');
+    log('⏻ Standby. Press START.');
   });
 </script>
 </body>
