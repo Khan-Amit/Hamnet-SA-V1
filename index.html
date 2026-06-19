@@ -251,7 +251,7 @@
     <div style="font-size:0.75rem; color:#6a7f8f; margin-top:6px;">© 2026 Seliim Ahmed – All rights reserved.</div>
   </header>
 
-  <!-- ===== MASTER POWER CONTROL ===== -->
+  <!-- MASTER POWER -->
   <div class="power-card">
     <div>
       <div class="power-status" id="powerStatusDisplay">⚡ SYSTEM OFFLINE</div>
@@ -263,7 +263,7 @@
     </button>
   </div>
 
-  <!-- ===== RADIO MODE SELECTOR ===== -->
+  <!-- RADIO MODE SELECTOR -->
   <div class="radio-selector" id="radioSelector">
     <div style="font-weight:bold; color:#8899aa;">📻 TRANSCEIVER MODE</div>
     <div class="mode-group">
@@ -276,7 +276,7 @@
     </div>
   </div>
 
-  <!-- ===== NETWORK GENERATION DASHBOARD ===== -->
+  <!-- NETWORK GENERATION DASHBOARD -->
   <div class="card gen-dashboard" id="genCard">
     <h2>🚀 LIVE NETWORK GENERATION</h2>
     <div><span class="gen-badge" id="genBadge">⏻ OFFLINE</span></div>
@@ -289,7 +289,7 @@
     <div class="gen-desc" id="activeLayerDesc">Press START to initialize hardware</div>
   </div>
 
-  <!-- ===== MAIN GRID ===== -->
+  <!-- MAIN GRID -->
   <div class="grid" id="mainGrid">
 
     <!-- LEFT COLUMN -->
@@ -391,9 +391,7 @@
         <div class="log" id="eventLog">System offline. Press START.</div>
       </div>
 
-      <!-- ============================================= -->
-      <!-- 🔍 HAM SNUFFER CORE (NEW)                     -->
-      <!-- ============================================= -->
+      <!-- SNUFFER CORE -->
       <div class="card disabled" id="cardSnuffer">
         <h2 style="border-left-color: #ca7a4a;">🔍 Ham Snuffer Core (U‑groove Ternary)</h2>
         <label>Raw Input (simulate sniffed packet):</label>
@@ -412,6 +410,7 @@
             <span>📂 Original Size: <span id="snufferOriginalSize">0</span> bytes</span>
             <span>📉 Ratio: <span id="snufferRatio">1.00</span>x</span>
           </div>
+          <div id="backendStatus" style="margin-top:5px; font-size:0.7rem; color:#6a7f8f;">🔌 Backend: <span id="backendStatusText">Unknown</span></div>
         </div>
       </div>
     </div>
@@ -431,6 +430,12 @@
   let isInternetReady = false;
   let radioMode = 'wifi';
   let sdrConnected = false;
+
+  // ============================================================
+  //  CODESPACE BACKEND URL (FIXED FOR YOUR ENVIRONMENT)
+  //  Replace this with your actual Codespace backend URL if it changes.
+  // ============================================================
+  const BACKEND_URL = 'https://studious-parakeet-p7wp9j7qjq926g9g-5000.github.dev/process';
 
   let peerConnection = null;
   let localStream = null;
@@ -476,6 +481,8 @@
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
       document.getElementById('morseStatus').textContent = 'Idle';
+      // Check backend status
+      checkBackendStatus();
     } else {
       btn.className = 'power-btn off';
       document.getElementById('powerBtnLabel').textContent = 'START';
@@ -506,7 +513,27 @@
   }
 
   // ============================================================
-  //  RADIO MODE SELECTOR
+  //  BACKEND STATUS CHECK
+  // ============================================================
+  async function checkBackendStatus() {
+    try {
+      const response = await fetch(BACKEND_URL.replace('/process', '/ping'), { method: 'GET' });
+      if (response.ok) {
+        document.getElementById('backendStatusText').textContent = '✅ Connected (Python)';
+        document.getElementById('backendStatusText').style.color = '#4aaa6a';
+        log('✅ Python backend is reachable.');
+      } else {
+        throw new Error('Not reachable');
+      }
+    } catch (e) {
+      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
+      document.getElementById('backendStatusText').style.color = '#ca7a4a';
+      log('⚠️ Python backend not found. Using JavaScript fallback.');
+    }
+  }
+
+  // ============================================================
+  //  RADIO MODE
   // ============================================================
   function setRadioMode(mode) {
     if (!systemPowered) return;
@@ -536,7 +563,7 @@
   }
 
   // ============================================================
-  //  SDR CONNECTION (WebUSB)
+  //  SDR CONNECTION
   // ============================================================
   async function toggleSdrConnection() {
     if (!systemPowered || radioMode !== 'sdr') return;
@@ -616,9 +643,9 @@
   }
 
   // ============================================================
-  //  ⭐ SNUFFER CORE (U-GROOVE + TERNARY) ⭐
+  //  ⭐ SNUFFER CORE (U-GROOVE + TERNARY) WITH CODESPACE BRIDGE ⭐
   // ============================================================
-  function processSnufferData() {
+  async function processSnufferData() {
     if (!systemPowered) return;
     const input = document.getElementById('snufferInput').value;
     if (!input) {
@@ -628,58 +655,90 @@
     document.getElementById('snufferStatus').textContent = '⏳ Processing...';
 
     try {
-      // 1. Convert text to binary bytes
+      // 1. Try to reach the Python backend (Codespace)
+      const response = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: input })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          document.getElementById('snufferBinaryOutput').textContent = result.binary || '(empty)';
+          document.getElementById('snufferTernaryOutput').textContent = result.ternary || '(empty)';
+          document.getElementById('snufferCompressedSize').textContent = result.compressed_size || 0;
+          document.getElementById('snufferOriginalSize').textContent = result.original_size || 0;
+          document.getElementById('snufferRatio').textContent = (result.ratio || 1.0).toFixed(4);
+          document.getElementById('snufferStatus').textContent = '✅ Python backend processed!';
+          document.getElementById('backendStatusText').textContent = '✅ Connected (Python)';
+          document.getElementById('backendStatusText').style.color = '#4aaa6a';
+          log(`Snuffer (Python): ${result.original_size} bytes → ${result.compressed_size} ternary symbols (${result.ratio.toFixed(4)}x)`);
+          return;
+        }
+      }
+      // If backend fails, fallback to JS
+      document.getElementById('snufferStatus').textContent = '⚠️ Backend error, using JS fallback...';
+      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
+      document.getElementById('backendStatusText').style.color = '#ca7a4a';
+      processSnufferDataJS();
+    } catch (error) {
+      // Backend unreachable -> use JS fallback
+      document.getElementById('snufferStatus').textContent = '⚠️ Backend offline, using JS fallback...';
+      document.getElementById('backendStatusText').textContent = '⚠️ Fallback (JS)';
+      document.getElementById('backendStatusText').style.color = '#ca7a4a';
+      processSnufferDataJS();
+    }
+  }
+
+  // ============================================================
+  //  JAVASCRIPT FALLBACK (The original simulation)
+  // ============================================================
+  function processSnufferDataJS() {
+    const input = document.getElementById('snufferInput').value;
+    if (!input) return;
+    
+    try {
       const encoder = new TextEncoder();
       const bytes = encoder.encode(input);
       let binaryString = '';
       for (let b of bytes) {
         binaryString += b.toString(2).padStart(8, '0') + ' ';
       }
-      binaryString = binaryString.trim();
-
-      // 2. Simulate U-groove smoothing (parabolic interpolation on bits)
-      // We take the binary bits (0/1) and apply a moving average to simulate smoothing
-      const rawBits = binaryString.replace(/ /g, '').split('').map(Number);
+      binaryString = binaryString.trim().replace(/ /g, '');
+      
+      // Simulate U-groove smoothing
+      const rawBits = binaryString.split('').map(Number);
       let smoothedBits = [];
       for (let i = 0; i < rawBits.length; i++) {
         if (i === 0 || i === rawBits.length - 1) {
           smoothedBits.push(rawBits[i]);
         } else {
-          // U-groove: average of neighbors, pushing toward extremes
           let avg = (rawBits[i-1] + rawBits[i] + rawBits[i+1]) / 3;
-          // Thresholding to clean binary (simulate interpolation effect)
-          let val = avg > 0.5 ? 1 : 0;
-          smoothedBits.push(val);
+          smoothedBits.push(avg > 0.5 ? 1 : 0);
         }
       }
       const smoothedBinary = smoothedBits.join('');
-
-      // 3. TERNARY MAPPING (Base-3 compression)
+      
       const ternaryMap = { '00': '0', '01': '1', '10': '2', '11': '' };
       let ternaryOutput = [];
       for (let i = 0; i < smoothedBinary.length - 1; i += 2) {
         const chunk = smoothedBinary[i] + smoothedBinary[i+1];
         const val = ternaryMap[chunk];
-        if (val !== undefined && val !== '') {
-          ternaryOutput.push(val);
-        }
+        if (val !== undefined && val !== '') ternaryOutput.push(val);
       }
       const ternaryString = ternaryOutput.join('') || '(no valid ternary)';
-
-      // 4. Display results
+      
       document.getElementById('snufferBinaryOutput').textContent = smoothedBinary.slice(0, 200) + (smoothedBinary.length > 200 ? '...' : '');
       document.getElementById('snufferTernaryOutput').textContent = ternaryString.slice(0, 200) + (ternaryString.length > 200 ? '...' : '');
-      
       const originalSize = bytes.length;
       const compressedSize = ternaryString.length;
-      const ratio = (compressedSize / (originalSize * 8)).toFixed(2);
-      
+      const ratio = compressedSize / (originalSize * 8);
       document.getElementById('snufferCompressedSize').textContent = compressedSize;
       document.getElementById('snufferOriginalSize').textContent = originalSize;
-      document.getElementById('snufferRatio').textContent = ratio;
-
-      document.getElementById('snufferStatus').textContent = '✅ Processed!';
-      log(`Snuffer: ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio}x compression)`);
+      document.getElementById('snufferRatio').textContent = ratio.toFixed(4);
+      document.getElementById('snufferStatus').textContent = '✅ JS fallback processed!';
+      log(`Snuffer (JS): ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio.toFixed(4)}x)`);
     } catch (e) {
       document.getElementById('snufferStatus').textContent = '❌ Error';
       log('Snuffer error: ' + e.message);
@@ -747,7 +806,7 @@
   }
 
   // ============================================================
-  //  MIC DECODER (REAL STATE MACHINE)
+  //  MIC DECODER
   // ============================================================
   function decodeFromMic() {
     if (!systemPowered || isDecoding) return;
