@@ -16,7 +16,7 @@
       align-items: center;
     }
     .container {
-      max-width: 1100px;
+      max-width: 1200px;
       width: 100%;
     }
     header {
@@ -57,7 +57,7 @@
       border-left: 4px solid #fc5c7d;
       padding-left: 10px;
     }
-    textarea, input[type="text"], select {
+    textarea, input[type="text"] {
       width: 100%;
       background: #0d141c;
       border: 1px solid #3a4a5a;
@@ -145,6 +145,42 @@
       border-radius: 6px;
       background: #000;
     }
+    .gen-dashboard {
+      grid-column: 1 / -1;
+      background: #0d141c;
+      border-color: #4a607a;
+      text-align: center;
+    }
+    .gen-dashboard h2 {
+      border-left: none;
+      text-align: center;
+    }
+    .gen-badge {
+      background: #2a3a4a;
+      padding: 10px 40px;
+      border-radius: 60px;
+      border: 2px solid #fc5c7d;
+      box-shadow: 0 0 20px rgba(252,92,125,0.3);
+      font-size: 1.8rem;
+      font-weight: bold;
+      display: inline-block;
+      transition: all 0.3s;
+    }
+    .gen-legend {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #6a7f8f;
+    }
+    .gen-legend span::before { content: "● "; }
+    .legend-2g { color: #4aaa6a; }
+    .legend-4g { color: #4a8afc; }
+    .legend-5g { color: #aa4afc; }
+    .legend-9g { color: #fc2a5a; }
+    .gen-desc { font-size:0.8rem; margin-top:6px; color:#d4b483; }
     @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -158,10 +194,25 @@
     </div>
   </header>
 
+  <!-- ===== NETWORK GENERATION DASHBOARD ===== -->
+  <div class="card gen-dashboard">
+    <h2>🚀 LIVE NETWORK GENERATION</h2>
+    <div>
+      <span class="gen-badge" id="genBadge">⚡ 2G</span>
+    </div>
+    <div class="gen-legend">
+      <span class="legend-2g">2G: Global Morse (HF)</span>
+      <span class="legend-4g">4G+: Local P2P (Wi‑Fi)</span>
+      <span class="legend-5g">5G: SDR Mesh</span>
+      <span class="legend-9g">9G: Unclamped Backbone</span>
+    </div>
+    <div class="gen-desc" id="activeLayerDesc">Global Emergency Text (HF/Morse)</div>
+  </div>
+
   <!-- ===== MAIN GRID ===== -->
   <div class="grid">
 
-    <!-- ===== LEFT COLUMN ===== -->
+    <!-- LEFT COLUMN -->
     <div>
 
       <!-- MORSE TRANSLATOR -->
@@ -172,6 +223,7 @@
         <div class="flex">
           <button onclick="encodeMorse()">▶ Encode & Send</button>
           <button onclick="decodeFromMic()" class="btn-primary">🎤 Decode from Mic</button>
+          <button onclick="stopDecoding()">⏹ Stop</button>
           <span class="status" id="morseStatus">Idle</span>
         </div>
         <div style="margin-top:8px;">
@@ -179,6 +231,8 @@
           <div class="log" id="morseOutput">...</div>
           <label>Binary / ASCII:</label>
           <div class="log" id="binaryOutput">...</div>
+          <label>Decoded Text (from Mic):</label>
+          <div class="log" id="decodedText" style="background:#0d2818;">Waiting...</div>
         </div>
       </div>
 
@@ -203,12 +257,15 @@
       <!-- VOICE TEST -->
       <div class="card">
         <h2>🎤 Voice Transmission Test</h2>
-        <button onclick="recordVoiceTest()">🔴 Record & Transmit</button>
-        <button onclick="playVoiceTest()">🔊 Playback Decoded</button>
+        <div class="flex">
+          <button onclick="recordVoiceTest()">🔴 Record & Transmit</button>
+          <button onclick="playVoiceTest()">🔊 Playback Decoded</button>
+        </div>
         <div class="log" id="voiceLog">Ready...</div>
+        <audio id="voicePlayback" controls style="width:100%; margin-top:6px; display:none;"></audio>
       </div>
 
-      <!-- ==== NEW: OFFLINE MEDIA PLAYER (Google Drive ready) ==== -->
+      <!-- OFFLINE MEDIA PLAYER -->
       <div class="card">
         <h2>📁 Offline Media Player (Local / Google Drive)</h2>
         <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">
@@ -222,15 +279,15 @@
           </label>
         </div>
         <div class="media-player" id="mediaPlayerContainer">
-          <video id="localMediaPlayer" controls style="display:none;"></video>
-          <audio id="localAudioPlayer" controls style="display:none;"></audio>
+          <video id="localMediaPlayer" controls style="display:none; width:100%;"></video>
+          <audio id="localAudioPlayer" controls style="display:none; width:100%;"></audio>
           <div id="mediaStatus" style="padding:10px; color:#6a7f8f; text-align:center;">No file loaded.</div>
         </div>
       </div>
 
     </div>
 
-    <!-- ===== RIGHT COLUMN ===== -->
+    <!-- RIGHT COLUMN -->
     <div>
 
       <!-- VIDEO TRANSMISSION -->
@@ -275,10 +332,25 @@
   // ============================================================
   let audioCtx = null;
   let isInternetReady = false;
-  let wpm = 20;
   let peerConnection = null;
   let localStream = null;
   let remoteStream = null;
+
+  // Decoding state
+  let isDecoding = false;
+  let micAnalyser = null;
+  let micDataArray = null;
+  let decodeFrameId = null;
+  let decoderState = 'IDLE'; // IDLE, RECV_ON
+  let onStartTime = 0;
+  let offStartTime = 0;
+  let currentMorseWord = '';
+  let currentMorseChar = '';
+  const DOT_DURATION_FACTOR = 1.0;
+  const DASH_DURATION_FACTOR = 3.0;
+  const SYMBOL_GAP_FACTOR = 1.0;
+  const LETTER_GAP_FACTOR = 3.0;
+  const WORD_GAP_FACTOR = 7.0;
 
   const log = (msg) => {
     const el = document.getElementById('eventLog');
@@ -287,7 +359,29 @@
   log('hamnet-SA-V1 engine loaded.');
 
   // ============================================================
-  //  MORSE ENGINE (same as before)
+  //  NETWORK GENERATION INDICATOR
+  // ============================================================
+  function setGen(mode) {
+    const badge = document.getElementById('genBadge');
+    const desc = document.getElementById('activeLayerDesc');
+    if (!badge) return;
+    const layers = {
+      '2g': { label: '⚡ 2G', color: '#4aaa6a', desc: 'Global Emergency Text (HF/Morse)' },
+      '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Video/File (Wi‑Fi Direct)' },
+      '5g': { label: '📡 5G', color: '#aa4afc', desc: 'City Mesh Backhaul (SDR 100MHz)' },
+      '9g': { label: '🚀 9G', color: '#fc2a5a', desc: 'Unclamped Internet Backbone (4GHz+)' }
+    };
+    const layer = layers[mode] || layers['2g'];
+    badge.textContent = layer.label;
+    badge.style.borderColor = layer.color;
+    badge.style.boxShadow = `0 0 30px ${layer.color}66`;
+    if (desc) desc.textContent = layer.desc;
+    log(`Network generation switched to ${layer.label}`);
+  }
+  setGen('2g');
+
+  // ============================================================
+  //  MORSE ENGINE
   // ============================================================
   function getWpm() {
     return parseInt(document.getElementById('wpmSlider').value);
@@ -300,6 +394,7 @@
     'Y':'-.--','Z':'--..','0':'-----','1':'.----','2':'..---','3':'...--','4':'....-',
     '5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',' ':' '
   };
+  const REV_MORSE = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
 
   function textToMorse(text) {
     return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' ');
@@ -316,6 +411,7 @@
     }
     document.getElementById('binaryOutput').textContent = binBytes.trim() || '(binary)';
     playMorseAudio(morse);
+    setGen('2g');
     log(`Encoded "${text}" → ${morse}`);
   }
 
@@ -351,11 +447,8 @@
   }
 
   // ============================================================
-  //  DECODE FROM MIC (stub)
+  //  REAL MORSE DECODER (No simulation!)
   // ============================================================
-  let isDecoding = false;
-  let micAnalyser = null;
-
   function decodeFromMic() {
     if (isDecoding) { log('Already decoding.'); return; }
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -364,31 +457,112 @@
         const source = audioCtx.createMediaStreamSource(stream);
         micAnalyser = audioCtx.createAnalyser();
         micAnalyser.fftSize = 2048;
+        micAnalyser.smoothingTimeConstant = 0.2;
         source.connect(micAnalyser);
+        micDataArray = new Float32Array(micAnalyser.fftSize);
         isDecoding = true;
+        decoderState = 'IDLE';
+        currentMorseWord = '';
+        currentMorseChar = '';
         document.getElementById('morseStatus').textContent = 'Listening...';
-        log('Microphone active.');
-        detectMorse();
+        document.getElementById('decodedText').textContent = '';
+        log('Microphone active. Real Morse decoding started.');
+        setGen('2g');
+        decodeLoop();
       })
       .catch(err => { log('Mic error: '+err.message); });
   }
 
-  function detectMorse() {
+  function stopDecoding() {
+    isDecoding = false;
+    if (decodeFrameId) cancelAnimationFrame(decodeFrameId);
+    document.getElementById('morseStatus').textContent = 'Stopped';
+    log('Decoding stopped.');
+  }
+
+  function decodeLoop() {
     if (!isDecoding) return;
-    const buffer = new Float32Array(micAnalyser.fftSize);
-    micAnalyser.getFloatTimeDomainData(buffer);
+    micAnalyser.getFloatTimeDomainData(micDataArray);
     let sum = 0;
-    for (let i=0; i<buffer.length; i++) sum += buffer[i]*buffer[i];
-    const rms = Math.sqrt(sum / buffer.length);
-    document.getElementById('morseStatus').textContent = rms > 0.02 ? '🔊 Signal' : '⏺️ Listening...';
-    setTimeout(detectMorse, 200);
+    for (let i=0; i<micDataArray.length; i++) sum += micDataArray[i] * micDataArray[i];
+    const rms = Math.sqrt(sum / micDataArray.length);
+    const threshold = 0.015;
+    const now = performance.now(); // ms timestamp
+
+    // State machine
+    const wpm = getWpm();
+    const dotDurationMs = (1.2 / wpm) * 1000; // ms per dot
+    const dashDurationMs = dotDurationMs * 3;
+    const symbolGapMs = dotDurationMs;
+    const letterGapMs = dotDurationMs * 3;
+    const wordGapMs = dotDurationMs * 7;
+
+    const isSignal = rms > threshold;
+
+    if (isSignal) {
+      if (decoderState === 'IDLE') {
+        // Start of a symbol
+        decoderState = 'RECV_ON';
+        onStartTime = now;
+        document.getElementById('morseStatus').textContent = '🔊 Receiving...';
+      } else {
+        // already RECV_ON - just continue
+      }
+    } else {
+      // No signal
+      if (decoderState === 'RECV_ON') {
+        // End of a symbol - measure its duration
+        const onDuration = now - onStartTime;
+        let symbol = '';
+        if (onDuration < dotDurationMs * 1.5) symbol = '.';
+        else if (onDuration < dashDurationMs * 1.5) symbol = '-';
+        else symbol = ''; // too long, ignore
+
+        if (symbol) {
+          currentMorseChar += symbol;
+          document.getElementById('morseStatus').textContent = `📥 ${currentMorseChar}`;
+        }
+        decoderState = 'IDLE';
+        offStartTime = now;
+      } else {
+        // Already IDLE - measure OFF gap
+        if (offStartTime > 0) {
+          const offDuration = now - offStartTime;
+          // If we have a character and the gap is long enough, finalize it
+          if (currentMorseChar.length > 0) {
+            if (offDuration > wordGapMs) {
+              // Word gap
+              const letter = REV_MORSE[currentMorseChar] || '?';
+              currentMorseWord += (currentMorseWord ? ' ' : '') + letter;
+              currentMorseChar = '';
+              document.getElementById('decodedText').textContent = currentMorseWord;
+              document.getElementById('morseStatus').textContent = `📝 ${currentMorseWord}`;
+              log(`Decoded word: ${currentMorseWord}`);
+            } else if (offDuration > letterGapMs) {
+              // Letter gap
+              const letter = REV_MORSE[currentMorseChar] || '?';
+              currentMorseWord += letter;
+              currentMorseChar = '';
+              document.getElementById('decodedText').textContent = currentMorseWord;
+              document.getElementById('morseStatus').textContent = `📝 ${currentMorseWord}`;
+            }
+            // else: symbol gap, just reset offStartTime and continue
+          }
+          // Reset offStartTime to avoid repeated triggers
+          offStartTime = now;
+        }
+      }
+    }
+
+    decodeFrameId = requestAnimationFrame(decodeLoop);
   }
 
   // ============================================================
-  //  VOICE TEST
+  //  VOICE TEST (Real Record & Playback)
   // ============================================================
   let recordedChunks = [];
   let mediaRecorder = null;
+  let voiceBlobURL = null;
 
   function recordVoiceTest() {
     navigator.mediaDevices.getUserMedia({ audio: true })
@@ -397,17 +571,30 @@
         recordedChunks = [];
         mediaRecorder.ondataavailable = e => recordedChunks.push(e.data);
         mediaRecorder.onstop = () => {
-          document.getElementById('voiceLog').textContent = 'Voice recorded and decoded to: "HELLO FROM VOICE" (simulated)';
-          log('Voice test completed.');
+          const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+          voiceBlobURL = URL.createObjectURL(blob);
+          const audioEl = document.getElementById('voicePlayback');
+          audioEl.src = voiceBlobURL;
+          audioEl.style.display = 'block';
+          document.getElementById('voiceLog').textContent = `✅ Recorded ${(blob.size/1024).toFixed(1)} KB. Click Playback to hear.`;
+          log('Voice recorded successfully.');
         };
         mediaRecorder.start();
-        setTimeout(() => mediaRecorder.stop(), 3000);
-        log('Recording voice for 3 seconds...');
-      });
+        setTimeout(() => mediaRecorder.stop(), 4000);
+        document.getElementById('voiceLog').textContent = '🔴 Recording for 4 seconds...';
+        log('Recording voice...');
+      })
+      .catch(err => { log('Voice record error: '+err.message); });
   }
 
   function playVoiceTest() {
-    document.getElementById('voiceLog').textContent = 'Playback: "HELLO FROM VOICE" (simulated)';
+    const audioEl = document.getElementById('voicePlayback');
+    if (audioEl.src) {
+      audioEl.play();
+      document.getElementById('voiceLog').textContent = '🔊 Playing back recorded voice.';
+    } else {
+      document.getElementById('voiceLog').textContent = '⚠️ No recording found. Record first.';
+    }
   }
 
   // ============================================================
@@ -417,17 +604,24 @@
     isInternetReady = !isInternetReady;
     document.getElementById('internetStatus').textContent = isInternetReady ? 'ON' : 'OFF';
     document.getElementById('internetBtn').style.background = isInternetReady ? '#2a7a4a' : '#2d3d4d';
-    log(`Internet Ready ${isInternetReady ? 'activated' : 'deactivated'}`);
+    if (isInternetReady) {
+      setGen('9g');
+      log('Internet Ready activated → 9G Backbone mode.');
+    } else {
+      setGen('2g');
+      log('Internet Ready deactivated → 2G fallback.');
+    }
   }
 
   // ============================================================
-  //  VIDEO P2P
+  //  VIDEO P2P (Real WebRTC)
   // ============================================================
   async function startVideo() {
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       document.getElementById('localVideo').srcObject = localStream;
-      log('Camera started.');
+      setGen('4g');
+      log('Camera started. Network switched to 4G+ for local P2P.');
     } catch (e) { log('Camera error: '+e.message); }
   }
 
@@ -445,7 +639,7 @@
       if (!event.candidate) {
         const offer = peerConnection.localDescription;
         document.getElementById('offerSdp').value = offer.sdp;
-        log('Offer created.');
+        log('Offer created. Copy SDP to peer.');
       }
     };
     peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer))
@@ -463,16 +657,14 @@
   }
 
   // ============================================================
-  //  ★ NEW: OFFLINE MEDIA PLAYER (Local & Google Drive)
+  //  OFFLINE MEDIA PLAYER
   // ============================================================
   function playSampleTone() {
-    // Uses Web Audio to generate a clean "V" Morse tone (...-) as a sample – fully offline!
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const dotDur = 0.1; // 100ms dots
+    const dotDur = 0.1;
     const freq = 880;
-    const pattern = '...-'; // Morse for "V"
+    const pattern = '...-';
     let time = audioCtx.currentTime;
-    
     for (let sym of pattern) {
       const dur = sym === '.' ? dotDur : dotDur * 3;
       const osc = audioCtx.createOscillator();
@@ -494,14 +686,11 @@
   function loadLocalFile(event) {
     const file = event.target.files[0];
     if (!file) return;
-
     const url = URL.createObjectURL(file);
     const isVideo = file.type.startsWith('video/');
     const videoEl = document.getElementById('localMediaPlayer');
     const audioEl = document.getElementById('localAudioPlayer');
     const status = document.getElementById('mediaStatus');
-
-    // Hide both, show the right one
     videoEl.style.display = 'none';
     audioEl.style.display = 'none';
     videoEl.pause();
