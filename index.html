@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hamnet-SA-V1 · U‑groove Ternary Engine</title>
+  <title>hamnet-SA-V1 · Master Controller</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -15,15 +15,12 @@
       flex-direction: column;
       align-items: center;
     }
-    .container {
-      max-width: 1200px;
-      width: 100%;
-    }
+    .container { max-width: 1200px; width: 100%; }
     header {
       text-align: center;
       border-bottom: 2px solid #3f4a5a;
       padding-bottom: 15px;
-      margin-bottom: 30px;
+      margin-bottom: 20px;
     }
     h1 {
       font-size: 2.8rem;
@@ -32,11 +29,51 @@
       -webkit-text-fill-color: transparent;
       letter-spacing: 3px;
     }
-    .sub {
-      color: #8899aa;
-      font-size: 1rem;
-      letter-spacing: 2px;
+    .sub { color: #8899aa; font-size: 1rem; letter-spacing: 2px; }
+    
+    /* MASTER POWER CARD */
+    .power-card {
+      background: #1a212a;
+      border-radius: 16px;
+      padding: 20px 30px;
+      margin-bottom: 25px;
+      border: 2px solid #3f4a5a;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
     }
+    .power-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 4px solid #4a607a;
+      background: #2a3a4a;
+      color: white;
+      font-size: 1.2rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      line-height: 1.2;
+    }
+    .power-btn.on {
+      background: #2a7a4a;
+      border-color: #4aaa6a;
+      box-shadow: 0 0 30px rgba(74, 170, 106, 0.4);
+    }
+    .power-btn.off {
+      background: #6a2a2a;
+      border-color: #aa4a4a;
+      box-shadow: 0 0 30px rgba(170, 74, 74, 0.4);
+    }
+    .power-status { font-size: 1.5rem; font-weight: bold; }
+    .power-desc { color: #6a7f8f; font-size: 0.9rem; }
+
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -49,6 +86,12 @@
       padding: 18px 20px;
       border: 1px solid #2f3b48;
       box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      transition: opacity 0.3s, filter 0.3s;
+    }
+    .card.disabled {
+      opacity: 0.4;
+      filter: grayscale(0.8);
+      pointer-events: none;
     }
     .card h2 {
       font-size: 1.3rem;
@@ -81,16 +124,14 @@
       margin: 5px 5px 0 0;
       border: 1px solid #4a607a;
     }
-    button:hover { background: #3e5a72; transform: scale(1.02); }
+    button:hover:not(:disabled) { background: #3e5a72; transform: scale(1.02); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary { background: #c44569; border-color: #e66a8a; }
-    .btn-primary:hover { background: #d95a7a; }
+    .btn-primary:hover:not(:disabled) { background: #d95a7a; }
     .btn-green { background: #2a7a4a; border-color: #4aaa6a; }
-    .btn-green:hover { background: #3a9a5a; }
+    .btn-green:hover:not(:disabled) { background: #3a9a5a; }
     .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-    .slider {
-      width: 160px;
-      accent-color: #fc5c7d;
-    }
+    .slider { width: 160px; accent-color: #fc5c7d; }
     .status {
       background: #0d141c;
       padding: 6px 12px;
@@ -109,12 +150,7 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
-    .video-container {
-      display: flex;
-      gap: 15px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+    .video-container { display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; }
     .video-container video {
       width: 45%;
       min-width: 200px;
@@ -133,28 +169,15 @@
       border-radius: 6px;
       resize: none;
     }
-    .media-player {
-      width: 100%;
-      background: #0a0f15;
-      border-radius: 8px;
-      margin-top: 10px;
-    }
-    .media-player video, .media-player audio {
-      width: 100%;
-      max-height: 200px;
-      border-radius: 6px;
-      background: #000;
-    }
+    .media-player { width: 100%; background: #0a0f15; border-radius: 8px; margin-top: 10px; }
+    .media-player video, .media-player audio { width: 100%; max-height: 200px; border-radius: 6px; background: #000; }
     .gen-dashboard {
       grid-column: 1 / -1;
       background: #0d141c;
       border-color: #4a607a;
       text-align: center;
     }
-    .gen-dashboard h2 {
-      border-left: none;
-      text-align: center;
-    }
+    .gen-dashboard h2 { border-left: none; text-align: center; }
     .gen-badge {
       background: #2a3a4a;
       padding: 10px 40px;
@@ -181,49 +204,55 @@
     .legend-5g { color: #aa4afc; }
     .legend-9g { color: #fc2a5a; }
     .gen-desc { font-size:0.8rem; margin-top:6px; color:#d4b483; }
-    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } .power-card { flex-direction: column; gap: 15px; } }
   </style>
 </head>
 <body>
 <div class="container">
   <header>
     <h1>📡 hamnet‑SA‑V1</h1>
-    <div class="sub">U‑groove Ternary · Frequency‑Binding Engine · 9G Ready</div>
-    <div style="font-size:0.75rem; color:#6a7f8f; margin-top:6px;">
-      © 2026 Seliim Ahmed – All rights reserved. Unauthorised use prohibited.
-    </div>
+    <div class="sub">Master Node · U‑groove Ternary · 9G Backbone</div>
+    <div style="font-size:0.75rem; color:#6a7f8f; margin-top:6px;">© 2026 Seliim Ahmed – All rights reserved.</div>
   </header>
 
-  <!-- ===== NETWORK GENERATION DASHBOARD ===== -->
-  <div class="card gen-dashboard">
-    <h2>🚀 LIVE NETWORK GENERATION</h2>
+  <!-- ===== MASTER POWER CONTROL ===== -->
+  <div class="power-card">
     <div>
-      <span class="gen-badge" id="genBadge">⚡ 2G</span>
+      <div class="power-status" id="powerStatusDisplay">⚡ SYSTEM OFFLINE</div>
+      <div class="power-desc" id="powerDesc">Press START to boot the mesh node</div>
     </div>
+    <button class="power-btn off" id="masterPowerBtn" onclick="toggleMasterPower()">
+      <span id="powerBtnLabel">START</span>
+      <span style="font-size:0.5rem;">NODE</span>
+    </button>
+  </div>
+
+  <!-- ===== NETWORK GENERATION DASHBOARD ===== -->
+  <div class="card gen-dashboard" id="genCard">
+    <h2>🚀 LIVE NETWORK GENERATION</h2>
+    <div><span class="gen-badge" id="genBadge">⏻ OFFLINE</span></div>
     <div class="gen-legend">
       <span class="legend-2g">2G: Global Morse (HF)</span>
       <span class="legend-4g">4G+: Local P2P (Wi‑Fi)</span>
       <span class="legend-5g">5G: SDR Mesh</span>
       <span class="legend-9g">9G: Unclamped Backbone</span>
     </div>
-    <div class="gen-desc" id="activeLayerDesc">Global Emergency Text (HF/Morse)</div>
+    <div class="gen-desc" id="activeLayerDesc">Press START to initialize hardware</div>
   </div>
 
-  <!-- ===== MAIN GRID ===== -->
-  <div class="grid">
+  <!-- ===== MAIN GRID (All cards disabled until START) ===== -->
+  <div class="grid" id="mainGrid">
 
     <!-- LEFT COLUMN -->
     <div>
-
-      <!-- MORSE TRANSLATOR -->
-      <div class="card">
+      <div class="card disabled" id="cardMorse">
         <h2>📡 Morse ↔ Binary ↔ ASCII</h2>
         <label>Input text:</label>
         <textarea id="textInput" placeholder="Type or paste text...">HELLO WORLD</textarea>
         <div class="flex">
-          <button onclick="encodeMorse()">▶ Encode & Send</button>
-          <button onclick="decodeFromMic()" class="btn-primary">🎤 Decode from Mic</button>
-          <button onclick="stopDecoding()">⏹ Stop</button>
+          <button onclick="encodeMorse()" disabled>▶ Encode & Send</button>
+          <button onclick="decodeFromMic()" class="btn-primary" disabled>🎤 Decode from Mic</button>
+          <button onclick="stopDecoding()" disabled>⏹ Stop</button>
           <span class="status" id="morseStatus">Idle</span>
         </div>
         <div style="margin-top:8px;">
@@ -236,8 +265,7 @@
         </div>
       </div>
 
-      <!-- SPEED & TRANSFER -->
-      <div class="card">
+      <div class="card disabled" id="cardSpeed">
         <h2>⚙️ Speed & Internet‑Ready</h2>
         <div class="flex">
           <label>WPM: <span id="wpmDisplay">20</span></label>
@@ -245,126 +273,179 @@
                  oninput="document.getElementById('wpmDisplay').textContent=this.value">
         </div>
         <div class="flex" style="margin-top:10px;">
-          <button id="internetBtn" onclick="toggleInternetReady()">🌐 Transfer to Internet Ready</button>
+          <button id="internetBtn" onclick="toggleInternetReady()" disabled>🌐 Transfer to Internet Ready</button>
           <span class="status" id="internetStatus">OFF</span>
         </div>
         <div style="margin-top:8px;">
-          <label>Source transmission area (raw data):</label>
+          <label>Source transmission area:</label>
           <textarea id="sourceData" placeholder="Binary or text to transmit..."></textarea>
         </div>
       </div>
 
-      <!-- VOICE TEST -->
-      <div class="card">
+      <div class="card disabled" id="cardVoice">
         <h2>🎤 Voice Transmission Test</h2>
         <div class="flex">
-          <button onclick="recordVoiceTest()">🔴 Record & Transmit</button>
-          <button onclick="playVoiceTest()">🔊 Playback Decoded</button>
+          <button onclick="recordVoiceTest()" disabled>🔴 Record & Transmit</button>
+          <button onclick="playVoiceTest()" disabled>🔊 Playback Decoded</button>
         </div>
         <div class="log" id="voiceLog">Ready...</div>
         <audio id="voicePlayback" controls style="width:100%; margin-top:6px; display:none;"></audio>
       </div>
 
-      <!-- OFFLINE MEDIA PLAYER -->
-      <div class="card">
-        <h2>📁 Offline Media Player (Local / Google Drive)</h2>
-        <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">
-          Download any audio/video from Google Drive to your computer, then load it here.
-        </p>
+      <div class="card disabled" id="cardMedia">
+        <h2>📁 Offline Media Player</h2>
+        <p style="font-size:0.8rem; color:#8899aa; margin-bottom:8px;">Load local audio/video files.</p>
         <div class="flex">
-          <button onclick="playSampleTone()" class="btn-green">🎵 Sample Morse Tone</button>
+          <button onclick="playSampleTone()" class="btn-green" disabled>🎵 Sample Tone</button>
           <label style="background:#2d3d4d; padding:8px 18px; border-radius:30px; cursor:pointer; border:1px solid #4a607a;">
             📂 Choose File
             <input type="file" id="fileInput" accept="audio/*,video/*" style="display:none;" onchange="loadLocalFile(event)">
           </label>
         </div>
-        <div class="media-player" id="mediaPlayerContainer">
+        <div class="media-player">
           <video id="localMediaPlayer" controls style="display:none; width:100%;"></video>
           <audio id="localAudioPlayer" controls style="display:none; width:100%;"></audio>
           <div id="mediaStatus" style="padding:10px; color:#6a7f8f; text-align:center;">No file loaded.</div>
         </div>
       </div>
-
     </div>
 
     <!-- RIGHT COLUMN -->
     <div>
-
-      <!-- VIDEO TRANSMISSION -->
-      <div class="card">
+      <div class="card disabled" id="cardVideo">
         <h2>📹 Video (P2P, no internet)</h2>
         <div class="video-container">
           <video id="localVideo" autoplay muted></video>
           <video id="remoteVideo" autoplay></video>
         </div>
         <div class="flex">
-          <button onclick="startVideo()">📷 Start Camera</button>
-          <button onclick="createOffer()" class="btn-primary">🔗 Create Offer</button>
-          <button onclick="setAnswer()">📥 Set Answer</button>
+          <button onclick="startVideo()" disabled>📷 Start Camera</button>
+          <button onclick="createOffer()" class="btn-primary" disabled>🔗 Create Offer</button>
+          <button onclick="setAnswer()" disabled>📥 Set Answer</button>
         </div>
         <div style="margin-top:8px;">
-          <label>Offer SDP (copy to peer):</label>
+          <label>Offer SDP:</label>
           <textarea id="offerSdp" class="sdp-box" readonly></textarea>
-          <label>Answer SDP (paste from peer):</label>
+          <label>Answer SDP:</label>
           <textarea id="answerSdp" class="sdp-box" placeholder="Paste answer here..."></textarea>
         </div>
       </div>
 
-      <!-- SYSTEM LOG -->
-      <div class="card">
+      <div class="card disabled" id="cardLog">
         <h2>📋 Event Log</h2>
-        <div class="log" id="eventLog">System initialised. hamnet-SA-V1 ready.</div>
+        <div class="log" id="eventLog">System offline. Press START.</div>
       </div>
-
     </div>
   </div>
 
-  <!-- FOOTER -->
   <div style="text-align:center; color:#5a6f7f; font-size:0.8rem; margin-top:25px; border-top:1px solid #2a3a4a; padding-top:15px;">
-    <p>Concept & architecture: <strong>Seliim Ahmed</strong> · amit.khanna.1082@gmail.com</p>
-    <p>Unauthorized replication, commercial use, or patent filing is strictly prohibited and will be prosecuted.</p>
+    <p>Concept: <strong>Seliim Ahmed</strong> · amit.khanna.1082@gmail.com</p>
   </div>
 </div>
 
 <script>
   // ============================================================
-  //  GLOBALS
+  //  MASTER POWER CONTROL (THE ON/OFF BRAIN)
   // ============================================================
+  let systemPowered = false;
   let audioCtx = null;
   let isInternetReady = false;
   let peerConnection = null;
   let localStream = null;
   let remoteStream = null;
-
-  // Decoding state
   let isDecoding = false;
   let micAnalyser = null;
   let micDataArray = null;
   let decodeFrameId = null;
-  let decoderState = 'IDLE'; // IDLE, RECV_ON
-  let onStartTime = 0;
-  let offStartTime = 0;
-  let currentMorseWord = '';
-  let currentMorseChar = '';
-  const DOT_DURATION_FACTOR = 1.0;
-  const DASH_DURATION_FACTOR = 3.0;
-  const SYMBOL_GAP_FACTOR = 1.0;
-  const LETTER_GAP_FACTOR = 3.0;
-  const WORD_GAP_FACTOR = 7.0;
+  let decoderState = 'IDLE';
+  let onStartTime = 0, offStartTime = 0;
+  let currentMorseWord = '', currentMorseChar = '';
+  let recordedChunks = [];
+  let mediaRecorder = null;
+  let voiceBlobURL = null;
 
   const log = (msg) => {
     const el = document.getElementById('eventLog');
     el.textContent = new Date().toLocaleTimeString() + ' — ' + msg + '\n' + el.textContent;
   };
-  log('hamnet-SA-V1 engine loaded.');
+
+  function toggleMasterPower() {
+    systemPowered = !systemPowered;
+    const btn = document.getElementById('masterPowerBtn');
+    const statusDisplay = document.getElementById('powerStatusDisplay');
+    const desc = document.getElementById('powerDesc');
+    const badge = document.getElementById('genBadge');
+    const layerDesc = document.getElementById('activeLayerDesc');
+
+    if (systemPowered) {
+      // ---- POWER ON ----
+      btn.className = 'power-btn on';
+      document.getElementById('powerBtnLabel').textContent = 'ON';
+      statusDisplay.textContent = '⚡ SYSTEM ONLINE';
+      desc.textContent = 'Node active. Hardware initialized.';
+      
+      // Enable all cards
+      document.querySelectorAll('.card').forEach(c => c.classList.remove('disabled'));
+      document.querySelectorAll('button').forEach(b => b.disabled = false);
+      
+      // Init Audio Context
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Set Gen to 2G (Default)
+      badge.textContent = '⚡ 2G';
+      badge.style.borderColor = '#4aaa6a';
+      badge.style.boxShadow = '0 0 30px #4aaa6a66';
+      layerDesc.textContent = 'Global Emergency Text (HF/Morse)';
+      log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
+      document.getElementById('morseStatus').textContent = 'Idle';
+    } else {
+      // ---- POWER OFF (KILL EVERYTHING) ----
+      btn.className = 'power-btn off';
+      document.getElementById('powerBtnLabel').textContent = 'START';
+      statusDisplay.textContent = '⛔ SYSTEM OFFLINE';
+      desc.textContent = 'Press START to boot the mesh node';
+      
+      // Disable all cards
+      document.querySelectorAll('.card').forEach(c => c.classList.add('disabled'));
+      document.querySelectorAll('button').forEach(b => b.disabled = true);
+      
+      // Kill audio
+      if (audioCtx && audioCtx.state === 'running') audioCtx.close();
+      audioCtx = null;
+      
+      // Kill mic
+      if (isDecoding) stopDecoding();
+      if (micAnalyser) { micAnalyser = null; }
+      
+      // Kill camera
+      if (localStream) {
+        localStream.getTracks().forEach(t => t.stop());
+        localStream = null;
+        document.getElementById('localVideo').srcObject = null;
+      }
+      if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+      }
+      
+      // Reset UI
+      badge.textContent = '⏻ OFFLINE';
+      badge.style.borderColor = '#fc5c7d';
+      badge.style.boxShadow = '0 0 20px rgba(252,92,125,0.3)';
+      layerDesc.textContent = 'Press START to initialize hardware';
+      document.getElementById('internetStatus').textContent = 'OFF';
+      document.getElementById('morseStatus').textContent = 'Offline';
+      log('⛔ SYSTEM SHUTDOWN. All streams closed.');
+    }
+  }
 
   // ============================================================
-  //  NETWORK GENERATION INDICATOR
+  //  GENERATION SETTER (Overlay for the badge)
   // ============================================================
   function setGen(mode) {
+    if (!systemPowered) return;
     const badge = document.getElementById('genBadge');
     const desc = document.getElementById('activeLayerDesc');
-    if (!badge) return;
     const layers = {
       '2g': { label: '⚡ 2G', color: '#4aaa6a', desc: 'Global Emergency Text (HF/Morse)' },
       '4g': { label: '📶 4G+', color: '#4a8afc', desc: 'Local P2P Video/File (Wi‑Fi Direct)' },
@@ -378,15 +459,11 @@
     if (desc) desc.textContent = layer.desc;
     log(`Network generation switched to ${layer.label}`);
   }
-  setGen('2g');
 
   // ============================================================
-  //  MORSE ENGINE
+  //  MORSE ENGINE (Same as before, but checks systemPowered)
   // ============================================================
-  function getWpm() {
-    return parseInt(document.getElementById('wpmSlider').value);
-  }
-
+  function getWpm() { return parseInt(document.getElementById('wpmSlider').value); }
   const MORSE = {
     'A':'.-','B':'-...','C':'-.-.','D':'-..','E':'.','F':'..-.','G':'--.','H':'....',
     'I':'..','J':'.---','K':'-.-','L':'.-..','M':'--','N':'-.','O':'---','P':'.--.',
@@ -396,19 +473,16 @@
   };
   const REV_MORSE = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
 
-  function textToMorse(text) {
-    return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' ');
-  }
+  function textToMorse(text) { return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' '); }
 
   function encodeMorse() {
+    if (!systemPowered) return;
     const text = document.getElementById('textInput').value;
     if (!text.trim()) return;
     const morse = textToMorse(text);
     document.getElementById('morseOutput').textContent = morse;
     let binBytes = '';
-    for (let ch of text) {
-      binBytes += ch.charCodeAt(0).toString(2).padStart(8,'0') + ' ';
-    }
+    for (let ch of text) binBytes += ch.charCodeAt(0).toString(2).padStart(8,'0') + ' ';
     document.getElementById('binaryOutput').textContent = binBytes.trim() || '(binary)';
     playMorseAudio(morse);
     setGen('2g');
@@ -416,7 +490,7 @@
   }
 
   function playMorseAudio(morse) {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!systemPowered || !audioCtx) return;
     const wpm = getWpm();
     const dotDur = 1.2 / wpm;
     const freq = 800;
@@ -447,10 +521,10 @@
   }
 
   // ============================================================
-  //  REAL MORSE DECODER (No simulation!)
+  //  MIC DECODER (State machine)
   // ============================================================
   function decodeFromMic() {
-    if (isDecoding) { log('Already decoding.'); return; }
+    if (!systemPowered || isDecoding) return;
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       .then(stream => {
@@ -481,19 +555,16 @@
   }
 
   function decodeLoop() {
-    if (!isDecoding) return;
+    if (!isDecoding || !systemPowered) return;
     micAnalyser.getFloatTimeDomainData(micDataArray);
     let sum = 0;
     for (let i=0; i<micDataArray.length; i++) sum += micDataArray[i] * micDataArray[i];
     const rms = Math.sqrt(sum / micDataArray.length);
     const threshold = 0.015;
-    const now = performance.now(); // ms timestamp
-
-    // State machine
+    const now = performance.now();
     const wpm = getWpm();
-    const dotDurationMs = (1.2 / wpm) * 1000; // ms per dot
+    const dotDurationMs = (1.2 / wpm) * 1000;
     const dashDurationMs = dotDurationMs * 3;
-    const symbolGapMs = dotDurationMs;
     const letterGapMs = dotDurationMs * 3;
     const wordGapMs = dotDurationMs * 7;
 
@@ -501,23 +572,16 @@
 
     if (isSignal) {
       if (decoderState === 'IDLE') {
-        // Start of a symbol
         decoderState = 'RECV_ON';
         onStartTime = now;
         document.getElementById('morseStatus').textContent = '🔊 Receiving...';
-      } else {
-        // already RECV_ON - just continue
       }
     } else {
-      // No signal
       if (decoderState === 'RECV_ON') {
-        // End of a symbol - measure its duration
         const onDuration = now - onStartTime;
         let symbol = '';
         if (onDuration < dotDurationMs * 1.5) symbol = '.';
         else if (onDuration < dashDurationMs * 1.5) symbol = '-';
-        else symbol = ''; // too long, ignore
-
         if (symbol) {
           currentMorseChar += symbol;
           document.getElementById('morseStatus').textContent = `📥 ${currentMorseChar}`;
@@ -525,46 +589,36 @@
         decoderState = 'IDLE';
         offStartTime = now;
       } else {
-        // Already IDLE - measure OFF gap
         if (offStartTime > 0) {
           const offDuration = now - offStartTime;
-          // If we have a character and the gap is long enough, finalize it
           if (currentMorseChar.length > 0) {
             if (offDuration > wordGapMs) {
-              // Word gap
               const letter = REV_MORSE[currentMorseChar] || '?';
               currentMorseWord += (currentMorseWord ? ' ' : '') + letter;
               currentMorseChar = '';
               document.getElementById('decodedText').textContent = currentMorseWord;
               document.getElementById('morseStatus').textContent = `📝 ${currentMorseWord}`;
-              log(`Decoded word: ${currentMorseWord}`);
+              log(`Decoded: ${currentMorseWord}`);
             } else if (offDuration > letterGapMs) {
-              // Letter gap
               const letter = REV_MORSE[currentMorseChar] || '?';
               currentMorseWord += letter;
               currentMorseChar = '';
               document.getElementById('decodedText').textContent = currentMorseWord;
               document.getElementById('morseStatus').textContent = `📝 ${currentMorseWord}`;
             }
-            // else: symbol gap, just reset offStartTime and continue
           }
-          // Reset offStartTime to avoid repeated triggers
           offStartTime = now;
         }
       }
     }
-
     decodeFrameId = requestAnimationFrame(decodeLoop);
   }
 
   // ============================================================
-  //  VOICE TEST (Real Record & Playback)
+  //  VOICE TEST
   // ============================================================
-  let recordedChunks = [];
-  let mediaRecorder = null;
-  let voiceBlobURL = null;
-
   function recordVoiceTest() {
+    if (!systemPowered) return;
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(stream => {
         mediaRecorder = new MediaRecorder(stream);
@@ -576,94 +630,75 @@
           const audioEl = document.getElementById('voicePlayback');
           audioEl.src = voiceBlobURL;
           audioEl.style.display = 'block';
-          document.getElementById('voiceLog').textContent = `✅ Recorded ${(blob.size/1024).toFixed(1)} KB. Click Playback to hear.`;
-          log('Voice recorded successfully.');
+          document.getElementById('voiceLog').textContent = `✅ Recorded ${(blob.size/1024).toFixed(1)} KB.`;
         };
         mediaRecorder.start();
         setTimeout(() => mediaRecorder.stop(), 4000);
-        document.getElementById('voiceLog').textContent = '🔴 Recording for 4 seconds...';
-        log('Recording voice...');
-      })
-      .catch(err => { log('Voice record error: '+err.message); });
+        document.getElementById('voiceLog').textContent = '🔴 Recording 4s...';
+      });
   }
-
   function playVoiceTest() {
     const audioEl = document.getElementById('voicePlayback');
-    if (audioEl.src) {
-      audioEl.play();
-      document.getElementById('voiceLog').textContent = '🔊 Playing back recorded voice.';
-    } else {
-      document.getElementById('voiceLog').textContent = '⚠️ No recording found. Record first.';
-    }
+    if (audioEl.src) { audioEl.play(); document.getElementById('voiceLog').textContent = '🔊 Playing...'; }
+    else document.getElementById('voiceLog').textContent = '⚠️ No recording.';
   }
 
   // ============================================================
-  //  INTERNET READY
+  //  INTERNET READY (9G TOGGLE)
   // ============================================================
   function toggleInternetReady() {
+    if (!systemPowered) return;
     isInternetReady = !isInternetReady;
     document.getElementById('internetStatus').textContent = isInternetReady ? 'ON' : 'OFF';
     document.getElementById('internetBtn').style.background = isInternetReady ? '#2a7a4a' : '#2d3d4d';
-    if (isInternetReady) {
-      setGen('9g');
-      log('Internet Ready activated → 9G Backbone mode.');
-    } else {
-      setGen('2g');
-      log('Internet Ready deactivated → 2G fallback.');
-    }
+    if (isInternetReady) setGen('9g');
+    else setGen('2g');
   }
 
   // ============================================================
-  //  VIDEO P2P (Real WebRTC)
+  //  VIDEO P2P (4G/5G local)
   // ============================================================
   async function startVideo() {
+    if (!systemPowered) return;
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       document.getElementById('localVideo').srcObject = localStream;
       setGen('4g');
-      log('Camera started. Network switched to 4G+ for local P2P.');
+      log('Camera started → 4G+ mode.');
     } catch (e) { log('Camera error: '+e.message); }
   }
 
   function createOffer() {
-    if (!localStream) { log('Start camera first.'); return; }
+    if (!systemPowered || !localStream) { log('Start camera first.'); return; }
     const configuration = { iceServers: [] };
     peerConnection = new RTCPeerConnection(configuration);
     localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
     peerConnection.ontrack = event => {
       remoteStream = event.streams[0];
       document.getElementById('remoteVideo').srcObject = remoteStream;
-      log('Remote video stream received.');
+      log('Remote video received.');
     };
     peerConnection.onicecandidate = event => {
       if (!event.candidate) {
-        const offer = peerConnection.localDescription;
-        document.getElementById('offerSdp').value = offer.sdp;
-        log('Offer created. Copy SDP to peer.');
+        document.getElementById('offerSdp').value = peerConnection.localDescription.sdp;
+        log('Offer created.');
       }
     };
-    peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer))
-      .catch(e => log('Offer error: '+e.message));
+    peerConnection.createOffer().then(offer => peerConnection.setLocalDescription(offer));
   }
 
   function setAnswer() {
     const sdp = document.getElementById('answerSdp').value;
-    if (!sdp) { log('Paste answer SDP first.'); return; }
-    if (!peerConnection) { log('Create an offer first.'); return; }
-    const answer = new RTCSessionDescription({ type: 'answer', sdp: sdp });
-    peerConnection.setRemoteDescription(answer)
-      .then(() => log('Answer applied, connection established.'))
-      .catch(e => log('Answer error: '+e.message));
+    if (!sdp || !peerConnection) return;
+    peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sdp }));
   }
 
   // ============================================================
-  //  OFFLINE MEDIA PLAYER
+  //  OFFLINE MEDIA
   // ============================================================
   function playSampleTone() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const dotDur = 0.1;
-    const freq = 880;
-    const pattern = '...-';
+    if (!systemPowered || !audioCtx) return;
+    const dotDur = 0.1, freq = 880, pattern = '...-';
     let time = audioCtx.currentTime;
     for (let sym of pattern) {
       const dur = sym === '.' ? dotDur : dotDur * 3;
@@ -679,8 +714,7 @@
       osc.stop(time + dur);
       time += dur + dotDur;
     }
-    document.getElementById('mediaStatus').textContent = '🔊 Sample Morse tone (V = ...-) played!';
-    log('Sample tone played.');
+    document.getElementById('mediaStatus').textContent = '🔊 Sample tone (V) played.';
   }
 
   function loadLocalFile(event) {
@@ -690,37 +724,23 @@
     const isVideo = file.type.startsWith('video/');
     const videoEl = document.getElementById('localMediaPlayer');
     const audioEl = document.getElementById('localAudioPlayer');
-    const status = document.getElementById('mediaStatus');
     videoEl.style.display = 'none';
     audioEl.style.display = 'none';
-    videoEl.pause();
-    audioEl.pause();
-
+    videoEl.pause(); audioEl.pause();
     if (isVideo) {
-      videoEl.src = url;
-      videoEl.style.display = 'block';
-      videoEl.load();
-      videoEl.play().catch(() => {});
-      status.textContent = `▶️ Playing: ${file.name}`;
+      videoEl.src = url; videoEl.style.display = 'block'; videoEl.load(); videoEl.play();
     } else if (file.type.startsWith('audio/')) {
-      audioEl.src = url;
-      audioEl.style.display = 'block';
-      audioEl.load();
-      audioEl.play().catch(() => {});
-      status.textContent = `🔊 Playing: ${file.name}`;
-    } else {
-      status.textContent = '⚠️ Unsupported file type. Please select audio or video.';
+      audioEl.src = url; audioEl.style.display = 'block'; audioEl.load(); audioEl.play();
     }
-    log(`Loaded local file: ${file.name} (${file.type})`);
+    document.getElementById('mediaStatus').textContent = `▶️ ${file.name}`;
   }
 
   // ============================================================
   //  INIT
   // ============================================================
   document.addEventListener('DOMContentLoaded', () => {
-    encodeMorse();
+    log('hamnet-SA-V1 loaded. Press START.');
   });
-
 </script>
 </body>
 </html>
