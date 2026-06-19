@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hamnet-SA-V1 · Ham Snuffer Core</title>
+  <title>hamnet-SA-V1 · RF Snuffer Core</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -157,6 +157,8 @@
     .btn-green:hover:not(:disabled) { background: #3a9a5a; }
     .btn-snuffer { background: #8a4a2a; border-color: #ca7a4a; }
     .btn-snuffer:hover:not(:disabled) { background: #aa5a3a; }
+    .btn-sdr-sniff { background: #1a4a6a; border-color: #4a8afc; }
+    .btn-sdr-sniff:hover:not(:disabled) { background: #2a6a8a; }
     .flex { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
     .slider { width: 160px; accent-color: #fc5c7d; }
     .status {
@@ -245,7 +247,7 @@
 <div class="container">
   <header>
     <h1>📡 hamnet‑SA‑V1</h1>
-    <div class="sub">Ham Snuffer Core · U‑groove Ternary · 4G / 9G Ready</div>
+    <div class="sub">RF Snuffer · U‑groove Ternary · 4G / 9G Ready</div>
     <div style="font-size:0.75rem; color:#6a7f8f; margin-top:6px;">© 2026 Seliim Ahmed – All rights reserved.</div>
   </header>
 
@@ -378,19 +380,21 @@
         </div>
       </div>
 
-      <!-- SYSTEM LOG (CLEAN PLACEHOLDER) -->
+      <!-- SYSTEM LOG -->
       <div class="card disabled" id="cardLog">
         <h2>📋 Event Log</h2>
         <div class="log" id="eventLog">⏻ Standby. Press START.</div>
       </div>
 
-      <!-- HAM SNUFFER CORE (U-GROOVE TERNARY) -->
+      <!-- HAM SNUFFER CORE (U-GROOVE TERNARY + WEBSDR) -->
       <div class="card disabled" id="cardSnuffer">
         <h2 style="border-left-color: #ca7a4a;">🔍 Ham Snuffer Core (U‑groove Ternary)</h2>
         <label>Raw Input (simulate sniffed packet):</label>
         <textarea id="snufferInput" placeholder="Paste text or binary data...">HELLO WORLD</textarea>
         <div class="flex">
-          <button onclick="processSnufferData()" class="btn-snuffer" disabled>⚡ Process with U‑groove</button>
+          <button onclick="processSnufferData()" class="btn-snuffer" disabled>⚡ Process Text</button>
+          <button onclick="sniffFromSDR()" class="btn-sdr-sniff" disabled>📡 Sniff RF (WebUSB)</button>
+          <button onclick="toggleAutoSniff()" class="btn-green" disabled>🔄 Auto-Sniff</button>
           <span class="status" id="snufferStatus">Idle</span>
         </div>
         <div style="margin-top:10px;">
@@ -423,6 +427,9 @@
   let isInternetReady = false;
   let radioMode = 'wifi';
   let sdrConnected = false;
+  let sdrDevice = null;
+  let autoSniffInterval = null;
+  let isAutoSniffing = false;
 
   let peerConnection = null;
   let localStream = null;
@@ -444,7 +451,7 @@
   };
 
   // ============================================================
-  //  MASTER POWER (WITH GHOST KILLER)
+  //  MASTER POWER
   // ============================================================
   function toggleMasterPower() {
     systemPowered = !systemPowered;
@@ -467,10 +474,7 @@
       
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
-      
-      // KILL THE GHOST
       document.getElementById('eventLog').textContent = '';
-      
       document.getElementById('morseStatus').textContent = 'Idle';
       document.getElementById('backendStatusText').textContent = 'Native JS';
     } else {
@@ -489,6 +493,10 @@
       if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; document.getElementById('localVideo').srcObject = null; }
       if (peerConnection) { peerConnection.close(); peerConnection = null; }
       
+      // Stop SDR sniffing
+      if (autoSniffInterval) { clearInterval(autoSniffInterval); autoSniffInterval = null; isAutoSniffing = false; }
+      if (sdrDevice) { try { sdrDevice.close(); } catch(e) {} sdrDevice = null; sdrConnected = false; }
+      
       badge.textContent = '⏻ OFFLINE';
       badge.style.borderColor = '#fc5c7d';
       badge.style.boxShadow = '0 0 20px rgba(252,92,125,0.3)';
@@ -496,7 +504,6 @@
       document.getElementById('internetStatus').textContent = 'OFF';
       document.getElementById('morseStatus').textContent = 'Offline';
       document.getElementById('sdrStatus').textContent = 'Disconnected';
-      sdrConnected = false;
       document.getElementById('sdrConnectBtn').classList.remove('active');
       log('⛔ SYSTEM SHUTDOWN. All streams closed.');
     }
@@ -533,7 +540,7 @@
   }
 
   // ============================================================
-  //  SDR CONNECTION
+  //  SDR CONNECTION (WebUSB)
   // ============================================================
   async function toggleSdrConnection() {
     if (!systemPowered || radioMode !== 'sdr') return;
@@ -552,7 +559,7 @@
         await device.open();
         await device.selectConfiguration(1);
         await device.claimInterface(0);
-        window.sdrDevice = device;
+        sdrDevice = device;
         sdrConnected = true;
         btn.textContent = '🔌 Disconnect SDR';
         btn.classList.add('active');
@@ -572,7 +579,7 @@
         sdrConnected = false;
       }
     } else {
-      try { if (window.sdrDevice) await window.sdrDevice.close(); window.sdrDevice = null; } catch(e) {}
+      try { if (sdrDevice) { await sdrDevice.close(); sdrDevice = null; } } catch(e) {}
       sdrConnected = false;
       btn.textContent = '🔌 Connect SDR';
       btn.classList.remove('active');
@@ -613,7 +620,61 @@
   }
 
   // ============================================================
-  //  ⭐ SNUFFER CORE (PURE JAVASCRIPT - NO PYTHON) ⭐
+  //  ⭐ U-GROOVE ENGINE (PURE JAVASCRIPT - EATS ANY BYTES) ⭐
+  // ============================================================
+  function runUgrooveEngine(rawBytes) {
+    if (!rawBytes || rawBytes.length === 0) {
+      log('⚠️ No data to process.');
+      return;
+    }
+    
+    // Convert bytes to binary string
+    let binaryString = '';
+    for (let b of rawBytes) {
+      binaryString += b.toString(2).padStart(8, '0');
+    }
+    
+    // U-groove smoothing (Weighted majority vote)
+    const rawBits = binaryString.split('').map(Number);
+    let smoothedBits = [];
+    for (let i = 0; i < rawBits.length; i++) {
+      let center = rawBits[i];
+      let left = (i > 0) ? rawBits[i - 1] : center;
+      let right = (i < rawBits.length - 1) ? rawBits[i + 1] : center;
+      let sum = (center * 2) + left + right;
+      smoothedBits.push(sum > 2 ? 1 : 0);
+    }
+    const smoothedBinary = smoothedBits.join('');
+    
+    // Ternary mapping (Base-3)
+    const ternaryMap = { '00': '0', '01': '1', '10': '2', '11': '' };
+    let ternaryOutput = [];
+    for (let i = 0; i < smoothedBinary.length - 1; i += 2) {
+      const chunk = smoothedBinary[i] + smoothedBinary[i + 1];
+      const val = ternaryMap[chunk];
+      if (val !== undefined && val !== '') {
+        ternaryOutput.push(val);
+      }
+    }
+    const ternaryString = ternaryOutput.join('') || '(no valid ternary)';
+    
+    // Stats
+    const originalSize = rawBytes.length;
+    const compressedSize = ternaryString.length;
+    const ratio = compressedSize / (originalSize * 8);
+    
+    // Display
+    document.getElementById('snufferBinaryOutput').textContent = smoothedBinary.slice(0, 200) + (smoothedBinary.length > 200 ? '...' : '');
+    document.getElementById('snufferTernaryOutput').textContent = ternaryString.slice(0, 200) + (ternaryString.length > 200 ? '...' : '');
+    document.getElementById('snufferCompressedSize').textContent = compressedSize;
+    document.getElementById('snufferOriginalSize').textContent = originalSize;
+    document.getElementById('snufferRatio').textContent = ratio.toFixed(4);
+    document.getElementById('snufferStatus').textContent = '✅ Processed!';
+    document.getElementById('backendStatusText').textContent = 'U‑groove JS';
+  }
+
+  // ============================================================
+  //  PROCESS TEXT (SIMULATED PACKET)
   // ============================================================
   function processSnufferData() {
     if (!systemPowered) return;
@@ -623,64 +684,80 @@
       return;
     }
     document.getElementById('snufferStatus').textContent = '⏳ Processing...';
-    // Directly call the JS engine
-    processSnufferDataJS();
+    const encoder = new TextEncoder();
+    const rawBytes = encoder.encode(input);
+    runUgrooveEngine(rawBytes);
+    log(`📝 Text processed: "${input}" → ${rawBytes.length} bytes`);
   }
 
   // ============================================================
-  //  PURE JAVASCRIPT U-GROOVE ENGINE (THE "JSON" ALTERNATIVE)
+  //  SNIFF RF (WEBSUSB - READS RAW BYTES FROM SDR)
   // ============================================================
-  function processSnufferDataJS() {
-    const input = document.getElementById('snufferInput').value;
-    if (!input) return;
+  async function sniffFromSDR() {
+    if (!systemPowered) {
+      log('⚠️ System is offline. Press START first.');
+      return;
+    }
     
+    // If SDR not connected, try to connect
+    if (!sdrConnected || !sdrDevice) {
+      if (radioMode !== 'sdr') {
+        log('⚠️ Switch to External Ham SDR mode first.');
+        return;
+      }
+      await toggleSdrConnection();
+      if (!sdrConnected) return;
+    }
+
     try {
-      const encoder = new TextEncoder();
-      const bytes = encoder.encode(input);
-      let binaryString = '';
-      for (let b of bytes) {
-        binaryString += b.toString(2).padStart(8, '0');
+      document.getElementById('snufferStatus').textContent = '📡 Sniffing RF...';
+      const result = await sdrDevice.transferIn(1, 1024); // Read 1024 bytes
+      const rawBytes = new Uint8Array(result.data.buffer);
+      
+      if (rawBytes.length === 0) {
+        document.getElementById('snufferStatus').textContent = '⚠️ No RF data';
+        return;
       }
       
-      // ---- U-GROOVE SMOOTHING (Weighted Majority Vote) ----
-      const rawBits = binaryString.split('').map(Number);
-      let smoothedBits = [];
-      for (let i = 0; i < rawBits.length; i++) {
-        let center = rawBits[i];
-        let left = (i > 0) ? rawBits[i - 1] : center;
-        let right = (i < rawBits.length - 1) ? rawBits[i + 1] : center;
-        let sum = (center * 2) + left + right;
-        smoothedBits.push(sum > 2 ? 1 : 0);
-      }
-      const smoothedBinary = smoothedBits.join('');
-      
-      // ---- TERNARY MAPPING (Base-3) ----
-      const ternaryMap = { '00': '0', '01': '1', '10': '2', '11': '' };
-      let ternaryOutput = [];
-      for (let i = 0; i < smoothedBinary.length - 1; i += 2) {
-        const chunk = smoothedBinary[i] + smoothedBinary[i + 1];
-        const val = ternaryMap[chunk];
-        if (val !== undefined && val !== '') {
-          ternaryOutput.push(val);
-        }
-      }
-      const ternaryString = ternaryOutput.join('') || '(no valid ternary)';
-      
-      // ---- DISPLAY RESULTS ----
-      document.getElementById('snufferBinaryOutput').textContent = smoothedBinary.slice(0, 200) + (smoothedBinary.length > 200 ? '...' : '');
-      document.getElementById('snufferTernaryOutput').textContent = ternaryString.slice(0, 200) + (ternaryString.length > 200 ? '...' : '');
-      const originalSize = bytes.length;
-      const compressedSize = ternaryString.length;
-      const ratio = compressedSize / (originalSize * 8);
-      document.getElementById('snufferCompressedSize').textContent = compressedSize;
-      document.getElementById('snufferOriginalSize').textContent = originalSize;
-      document.getElementById('snufferRatio').textContent = ratio.toFixed(4);
-      document.getElementById('snufferStatus').textContent = '✅ Processed!';
-      document.getElementById('backendStatusText').textContent = 'Native JS (JSON)';
-      log(`⚡ Snuffer Engine: Native JS. ${originalSize} bytes → ${compressedSize} ternary symbols (${ratio.toFixed(4)}x)`);
+      runUgrooveEngine(rawBytes);
+      document.getElementById('snufferStatus').textContent = '✅ RF Sniffed!';
+      log(`📡 RF Sniffed: ${rawBytes.length} bytes from SDR`);
     } catch (e) {
-      document.getElementById('snufferStatus').textContent = '❌ Error';
-      log('Snuffer error: ' + e.message);
+      log('❌ RF read error: ' + e.message);
+      document.getElementById('snufferStatus').textContent = '❌ RF Error';
+    }
+  }
+
+  // ============================================================
+  //  AUTO-SNIFF (CONTINUOUS RF SCANNING)
+  // ============================================================
+  function toggleAutoSniff() {
+    if (!systemPowered) return;
+    if (!sdrConnected) {
+      log('⚠️ Connect SDR first.');
+      return;
+    }
+    
+    isAutoSniffing = !isAutoSniffing;
+    if (isAutoSniffing) {
+      autoSniffInterval = setInterval(async () => {
+        if (sdrConnected && sdrDevice) {
+          await sniffFromSDR();
+        } else {
+          clearInterval(autoSniffInterval);
+          isAutoSniffing = false;
+          document.getElementById('snufferStatus').textContent = '⏹ SDR Disconnected';
+        }
+      }, 1000); // Sniff every second
+      log('🔄 Auto-sniff started (every 1s)');
+      document.getElementById('snufferStatus').textContent = '🔄 Auto-sniffing...';
+    } else {
+      if (autoSniffInterval) {
+        clearInterval(autoSniffInterval);
+        autoSniffInterval = null;
+      }
+      log('⏹ Auto-sniff stopped.');
+      document.getElementById('snufferStatus').textContent = '⏹ Stopped';
     }
   }
 
