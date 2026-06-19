@@ -248,7 +248,7 @@
     </button>
   </div>
 
-  <!-- ===== RADIO MODE SELECTOR (Wi-Fi Mesh vs Ham SDR) ===== -->
+  <!-- ===== RADIO MODE SELECTOR ===== -->
   <div class="radio-selector" id="radioSelector">
     <div style="font-weight:bold; color:#8899aa;">📻 TRANSCEIVER MODE</div>
     <div class="mode-group">
@@ -428,7 +428,6 @@
       
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
-      // Default to Wi-Fi mode
       setRadioMode('wifi');
       log('🚀 SYSTEM BOOTED. hamnet-SA-V1 ready.');
       document.getElementById('morseStatus').textContent = 'Idle';
@@ -485,33 +484,76 @@
       wifiBtn.className = 'mode-btn';
       sdrBtn.className = 'mode-btn active-sdr';
       sdrConnect.disabled = false;
-      setGen('5g'); // Shows 5G until connected, then 9G
+      setGen('5g');
       log('📡 Switched to External Ham SDR mode. Waiting for USB connection.');
       document.getElementById('powerDesc').textContent = '📡 SDR mode. Connect your transceiver via USB.';
     }
   }
 
-  function toggleSdrConnection() {
+  // ============================================================
+  //  SDR CONNECTION (REAL WebUSB DRIVER)
+  // ============================================================
+  async function toggleSdrConnection() {
     if (!systemPowered || radioMode !== 'sdr') return;
     const btn = document.getElementById('sdrConnectBtn');
     const status = document.getElementById('sdrStatus');
-    
-    sdrConnected = !sdrConnected;
-    if (sdrConnected) {
-      btn.textContent = '🔌 Disconnect SDR';
-      btn.classList.add('active');
-      status.textContent = '✅ Connected (Simulated)';
-      status.style.color = '#4aaa6a';
-      setGen('9g');
-      log('🚀 SDR Transceiver connected. 9G Backbone active.');
-      document.getElementById('powerDesc').textContent = '🚀 9G Unclamped Backbone. RF link established.';
+
+    if (!sdrConnected) {
+      try {
+        // Check if WebUSB is supported
+        if (!('usb' in navigator)) {
+          log('❌ WebUSB not supported on this browser. Please use Chrome/Edge.');
+          status.textContent = '❌ Browser unsupported';
+          return;
+        }
+
+        log('🔍 Requesting USB SDR device...');
+        // Request any USB device (user selects the SDR from the popup)
+        const device = await navigator.usb.requestDevice({ 
+          filters: [] 
+        });
+        
+        await device.open();
+        await device.selectConfiguration(1);
+        await device.claimInterface(0);
+        
+        // Store the device globally for transmission
+        window.sdrDevice = device;
+        sdrConnected = true;
+        btn.textContent = '🔌 Disconnect SDR';
+        btn.classList.add('active');
+        status.textContent = '✅ Connected (Real SDR)';
+        status.style.color = '#4aaa6a';
+        setGen('9g');
+        log(`🚀 SDR Transceiver connected: ${device.productName}. 9G Backbone active.`);
+        document.getElementById('powerDesc').textContent = '🚀 9G Unclamped Backbone. RF link established.';
+        
+      } catch (error) {
+        if (error.message.includes('No device selected')) {
+          log('ℹ️ No SDR device selected by user.');
+          status.textContent = '⚠️ No device selected';
+        } else {
+          log('❌ SDR Connection failed: ' + error.message);
+          status.textContent = '❌ Connection Error';
+        }
+        sdrConnected = false;
+      }
     } else {
+      // Disconnect
+      try {
+        if (window.sdrDevice) {
+          await window.sdrDevice.close();
+          window.sdrDevice = null;
+        }
+      } catch(e) { log('SDR close error: '+e.message); }
+      
+      sdrConnected = false;
       btn.textContent = '🔌 Connect SDR';
       btn.classList.remove('active');
       status.textContent = 'Disconnected';
       status.style.color = '#e0e6ed';
       setGen('5g');
-      log('SDR Disconnected. Falling back to 5G ready state.');
+      log('SDR Disconnected.');
       document.getElementById('powerDesc').textContent = '📡 SDR mode. Connect your transceiver via USB.';
     }
   }
@@ -529,7 +571,7 @@
       '5g': { label: '📡 5G', color: '#aa4afc', desc: 'SDR Ready (Waiting for connection)' },
       '9g': { label: '🚀 9G', color: '#fc2a5a', desc: 'Unclamped Backbone (SDR Active)' }
     };
-    // If SDR is connected, force 9G regardless
+    // If SDR is connected, force 9G
     if (sdrConnected && radioMode === 'sdr') {
       const layer9 = layers['9g'];
       badge.textContent = layer9.label;
@@ -546,7 +588,7 @@
   }
 
   // ============================================================
-  //  MORSE ENGINE (Unchanged logic, but uses systemPowered)
+  //  MORSE ENGINE (WITH SDR TRANSMISSION LOGIC)
   // ============================================================
   function getWpm() { return parseInt(document.getElementById('wpmSlider').value); }
   const MORSE = {
@@ -560,7 +602,8 @@
 
   function textToMorse(text) { return text.toUpperCase().split('').map(ch => MORSE[ch] || '').join(' '); }
 
-  function encodeMorse() {
+  // --- ASYNC ENCODE ---
+  async function encodeMorse() {
     if (!systemPowered) return;
     const text = document.getElementById('textInput').value;
     if (!text.trim()) return;
@@ -570,8 +613,27 @@
     for (let ch of text) binBytes += ch.charCodeAt(0).toString(2).padStart(8,'0') + ' ';
     document.getElementById('binaryOutput').textContent = binBytes.trim() || '(binary)';
     playMorseAudio(morse);
+    
+    // --- SDR TRANSMISSION PATH (No Wi-Fi, No Cellular) ---
+    if (radioMode === 'sdr' && sdrConnected && window.sdrDevice) {
+      try {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text + '\n');
+        // Send over USB to SDR. Endpoint 1 is common for bulk out.
+        await window.sdrDevice.transferOut(1, data);
+        log(`📡 Data transmitted over SDR RF: "${text}" (${data.length} bytes)`);
+        document.getElementById('morseStatus').textContent = '📡 RF TX Done';
+      } catch (err) {
+        log('❌ SDR Transmit Error: ' + err.message);
+        document.getElementById('morseStatus').textContent = '❌ TX Failed';
+      }
+    } else if (radioMode === 'sdr' && !sdrConnected) {
+      log('⚠️ SDR not connected. Connect SDR to transmit over RF.');
+    } else {
+      log('📶 Transmitted over Wi-Fi Mesh / Audio (no cellular).');
+    }
+    
     setGen('2g');
-    log(`Encoded "${text}" → ${morse}`);
   }
 
   function playMorseAudio(morse) {
@@ -606,7 +668,7 @@
   }
 
   // ============================================================
-  //  MIC DECODER (Real state machine)
+  //  MIC DECODER (REAL STATE MACHINE)
   // ============================================================
   function decodeFromMic() {
     if (!systemPowered || isDecoding) return;
